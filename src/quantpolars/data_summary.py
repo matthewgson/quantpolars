@@ -9,16 +9,95 @@ except ImportError:
     GT_AVAILABLE = False
 
 
-def sm(df: Union[pl.DataFrame, pl.LazyFrame], styled: bool = False):
+class DataSummary:
+    """
+    A class to hold summary statistics for a DataFrame and provide various display options.
+    
+    Attributes:
+        df: pl.DataFrame containing the summary statistics
+    """
+    
+    def __init__(self, summary_df: pl.DataFrame):
+        """
+        Initialize DataSummary with a summary statistics DataFrame.
+        
+        Args:
+            summary_df: DataFrame containing summary statistics
+        """
+        self.df = summary_df
+    
+    def to_gt(self) -> "GT":
+        """
+        Convert the summary statistics to a styled GT table.
+        
+        Returns:
+            GT table with formatted display
+            
+        Raises:
+            ImportError: If great_tables is not available
+        """
+        if not GT_AVAILABLE:
+            raise ImportError("great_tables is required for styled output. Install with: pip3 install great-tables")
+        
+        # Convert to GT table with formatting - GT supports Polars DataFrames natively
+        gt_table = (
+            GT(self.df)
+            .tab_header(
+                title="Data Summary Statistics",
+                subtitle=f"Analysis of {len(self.df)} variables"
+            )
+            .fmt_number(
+                columns=["mean", "sd", "p1", "p5", "p25", "p50", "p75", "p95", "p99"],
+                decimals=2
+            )
+            .fmt_percent(
+                columns=["pct_missing"],
+                decimals=1
+            )
+            .fmt_date(
+                columns=["min", "max"],
+                date_style="month_day_year"
+            )
+            .cols_label(
+                variable="Variable",
+                type="Type", 
+                nobs="N Obs",
+                pct_missing="% Missing",
+                mean="Mean",
+                sd="Std Dev",
+                min="Min",
+                max="Max",
+                p1="1%",
+                p5="5%",
+                p25="25%",
+                p50="50%",
+                p75="75%",
+                p95="95%",
+                p99="99%",
+                n_unique="N Unique"
+            )
+        )
+        return gt_table
+    
+    def __repr__(self) -> str:
+        """Return string representation of the summary DataFrame."""
+        return self.df.__repr__()
+    
+    def __str__(self) -> str:
+        """Return string representation of the summary DataFrame."""
+        return self.df.__str__()
+
+
+def sm(df: Union[pl.DataFrame, pl.LazyFrame]) -> DataSummary:
     """
     Create comprehensive summary statistics for all columns in a single pass.
 
     Args:
         df: pl.DataFrame or pl.LazyFrame
-        styled: If True, return a styled GT table instead of DataFrame
 
     Returns:
-        pl.DataFrame with summary statistics or GT table if styled=True
+        DataSummary object containing the summary statistics DataFrame.
+        Use .df to access the raw DataFrame or .to_gt() for styled output.
     """
     is_lazy = isinstance(df, pl.LazyFrame)
     schema = df.collect_schema() if is_lazy else df.schema
@@ -176,48 +255,4 @@ def sm(df: Union[pl.DataFrame, pl.LazyFrame], styled: bool = False):
         .drop("type_order")
     )
 
-    if styled:
-        if not GT_AVAILABLE:
-            raise ImportError("great_tables is required for styled output. Install with: pip install great-tables")
-        
-        # Convert to GT table with formatting - GT supports Polars DataFrames natively
-        gt_table = (
-            GT(summary_df)
-            .tab_header(
-                title="Data Summary Statistics",
-                subtitle=f"Analysis of {len(summary_df)} variables"
-            )
-            .fmt_number(
-                columns=["mean", "sd", "p1", "p5", "p25", "p50", "p75", "p95", "p99"],
-                decimals=2
-            )
-            .fmt_percent(
-                columns=["pct_missing"],
-                decimals=1
-            )
-            .fmt_date(
-                columns=["min", "max"],
-                date_style="month_day_year"
-            )
-            .cols_label(
-                variable="Variable",
-                type="Type", 
-                nobs="N Obs",
-                pct_missing="% Missing",
-                mean="Mean",
-                sd="Std Dev",
-                min="Min",
-                max="Max",
-                p1="1%",
-                p5="5%",
-                p25="25%",
-                p50="50%",
-                p75="75%",
-                p95="95%",
-                p99="99%",
-                n_unique="N Unique"
-            )
-        )
-        return gt_table
-    
-    return summary_df
+    return DataSummary(summary_df)

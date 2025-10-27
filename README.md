@@ -10,16 +10,16 @@ pip3 install git+https://github.com/matthewgson/quantpolars.git
 
 **Requirements**: Python 3.8+, Polars
 
-
 ## Data Summary Function (`sm`)
 
-Generate comprehensive summary statistics for all columns in your DataFrame with a single function call.
+Generate comprehensive summary statistics for all columns in your DataFrame with a single function call. Returns a `DataSummary` object that provides both raw DataFrame access and styled output capabilities.
 
 ### Features
 
 - **Blazingly Fast**: Single-pass computation using Polars expressions
 - **Type-Aware**: Different statistics based on data type (numeric, date, categorical)
 - **Missing Data**: Includes percentage of missing values for each column
+- **Object-Oriented**: Returns `DataSummary` object with `.df` for raw data and `.to_gt()` for styled output
 - **Styled Output**: Optional Great Tables formatting for beautiful HTML tables
 - **LazyFrame Support**: Works with both eager and lazy evaluation
 
@@ -28,22 +28,50 @@ Generate comprehensive summary statistics for all columns in your DataFrame with
 ```python
 import polars as pl
 from datetime import date
-from quantpolars.data_summary import sm
+from quantpolars import sm
 
 # Create sample data
 df = pl.DataFrame({
-    'sales': [100, 200, 150, 300, 250, None],
-    'prices': [10.5, 15.2, 12.8, 18.9, 14.3],
-    'dates': [date(2023, 1, 1), date(2023, 2, 15), date(2023, 3, 10), date(2023, 4, 5), date(2023, 5, 20)],
-    'categories': ['A', 'B', 'A', 'C', 'B']
+    'revenue': [1000, 2500, 1800, 3200, 2900, None, 2100, 1750],
+    'profit_margin': [0.15, 0.22, 0.18, 0.25, 0.20, 0.17, 0.19, 0.16],
+    'transaction_date': [
+        date(2024, 1, 15), date(2024, 2, 20), date(2024, 3, 10),
+        date(2024, 4, 5), date(2024, 5, 12), date(2024, 6, 8),
+        date(2024, 7, 22), None
+    ],
+    'customer_segment': ['Enterprise', 'SMB', 'Enterprise', 'SMB', 'Enterprise', 'SMB', 'Enterprise', 'SMB'],
+    'active': [True, True, False, True, False, True, True, False]
 })
 
-# Generate summary statistics
-summary = sm(df)
-print(summary)
+print("Sample Data:")
+df
 ```
 
-### Output Columns
+```python
+# Generate summary statistics
+summary = sm(df)
+print("Summary Statistics with % Missing:")
+summary.df  # Access the raw DataFrame
+```
+
+**Output:**
+```
+shape: (5, 16)
+┌──────────────────┬─────────────┬──────┬─────────────┬───┬────────┬────────┬────────┬──────────┐
+│ variable         ┆ type        ┆ nobs ┆ pct_missing ┆ … ┆ p75    ┆ p95    ┆ p99    ┆ n_unique │
+│ ---              ┆ ---         ┆ ---  ┆ ---         ┆   ┆ ---    ┆ ---    ┆ ---    ┆ ---      │
+│ str              ┆ str         ┆ i64  ┆ f64         ┆   ┆ f64    ┆ f64    ┆ f64    ┆ i64      │
+╞══════════════════╪═════════════╪══════╪═════════════╪═══╪════════╪════════╪════════╪══════════╡
+│ transaction_date ┆ date        ┆ 7    ┆ 12.5        ┆ … ┆ null   ┆ null   ┆ null   ┆ 7        │
+│ customer_segment ┆ categorical ┆ 8    ┆ 0.0         ┆ … ┆ null   ┆ null   ┆ null   ┆ 2        │
+│ active           ┆ categorical ┆ 8    ┆ 0.0         ┆ … ┆ null   ┆ null   ┆ null   ┆ 2        │
+│ revenue          ┆ numeric     ┆ 7    ┆ 12.5        ┆ … ┆ 2900.0 ┆ 3200.0 ┆ 3200.0 ┆ 7        │
+│ profit_margin    ┆ numeric     ┆ 8    ┆ 0.0         ┆ … ┆ 0.2    ┆ 0.25   ┆ 0.25   ┆ 8        │
+└──────────────────┴─────────────┴──────┴─────────────┴───┴────────┴────────┴────────┴──────────┘
+```
+
+
+### Column Reference
 
 | Column | Description |
 |--------|-------------|
@@ -63,10 +91,32 @@ print(summary)
 For beautiful formatted tables with proper date formatting:
 
 ```python
-# Requires: pip install great-tables
-styled_summary = sm(df, styled=True)
+# Requires: pip3 install great-tables
+styled_summary = summary.to_gt()  # Convert to styled GT table
 styled_summary  # In Jupyter, displays as formatted HTML table
 ```
+
+**Rendered Output Example:**
+The `.to_gt()` method returns a Great Tables (GT) object that renders as a beautifully formatted HTML table in Jupyter notebooks with:
+
+- **Table Header**: "Data Summary Statistics" with subtitle showing variable count
+- **Formatted Numbers**: Statistics rounded to 2 decimal places
+- **Percentage Formatting**: Missing values shown as percentages (e.g., "12.5%")
+- **Date Formatting**: Min/max dates in readable format (e.g., "Jan 15, 2024")
+- **Professional Styling**: Clean borders, alternating row colors, proper alignment
+- **Column Labels**: User-friendly names ("Std Dev" instead of "sd", "N Obs" instead of "nobs")
+
+**Example of what the styled table displays:**
+
+| Variable | Type | N Obs | % Missing | Mean | Std Dev | Min | Max | 1% | 5% | 25% | 50% | 75% | 95% | 99% | N Unique |
+|----------|------|-------|-----------|------|---------|-----|-----|----|----|-----|-----|-----|-----|-----|----------|
+| transaction_date | date | 7 | 12.5% | — | — | Jan 15, 2024 | Jul 22, 2024 | — | — | — | — | — | — | — | 7 |
+| customer_segment | categorical | 8 | 0.0% | — | — | — | — | — | — | — | — | — | — | — | 2 |
+| active | categorical | 8 | 0.0% | — | — | — | — | — | — | — | — | — | — | — | 2 |
+| revenue | numeric | 7 | 12.5% | 2,225.00 | 716.02 | 1,000.00 | 3,200.00 | 1,000.00 | 1,000.00 | 1,800.00 | 2,100.00 | 2,900.00 | 3,200.00 | 3,200.00 | 7 |
+| profit_margin | numeric | 8 | 0.0% | 0.19 | 0.03 | 0.15 | 0.25 | 0.15 | 0.15 | 0.17 | 0.19 | 0.22 | 0.25 | 0.25 | 8 |
+
+
 
 ### Data Type Handling
 
@@ -103,13 +153,14 @@ df = df.with_columns(
 ## Updated API
 
 The functions now work on Polars DataFrames, allowing for:
+
 - **Batch Processing**: Price thousands of options in a single operation
 - **Big Data Ready**: Handles datasets larger than memory with Polars' streaming
 - **Extreme Speed**: Vectorized operations on columnar data
 
 ## Performance Benefits
 
-- **No Loops**: All math is vectorized in Polars/Rust
+- **No Loops**: All vectorized in Polars/Rust
 - **Memory Efficient**: Columnar storage and lazy evaluation
 - **Scalable**: Handles billions of rows with minimal memory
 - **Parallel**: Automatic parallelization where possible

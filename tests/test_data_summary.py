@@ -3,7 +3,7 @@
 import pytest
 import polars as pl
 from datetime import datetime, date
-from quantpolars.data_summary import sm
+from quantpolars.data_summary import sm, DataSummary
 
 
 class TestSMFunction:
@@ -32,20 +32,23 @@ class TestSMFunction:
         """Test sm function with a regular DataFrame."""
         result = sm(sample_dataframe)
 
-        # Check that result is a DataFrame
-        assert isinstance(result, pl.DataFrame)
+        # Check that result is a DataSummary object
+        assert isinstance(result, DataSummary)
+
+        # Check that it has a df attribute that is a DataFrame
+        assert isinstance(result.df, pl.DataFrame)
 
         # Check expected columns
         expected_columns = ["variable", "type", "nobs", "pct_missing", "mean", "sd", "min", "max", "p1", "p5", "p25", "p50", "p75", "p95", "p99", "n_unique"]
-        assert result.columns == expected_columns
+        assert result.df.columns == expected_columns
 
         # Check that all variables are present
-        variables = result["variable"].to_list()
+        variables = result.df["variable"].to_list()
         expected_vars = ["date_col", "datetime_col", "categorical_str", "categorical_bool", "numeric_int", "numeric_float"]
         assert set(variables) == set(expected_vars)
 
         # Check types are correctly identified
-        type_mapping = dict(zip(result["variable"], result["type"]))
+        type_mapping = dict(zip(result.df["variable"], result.df["type"]))
         assert type_mapping["numeric_int"] == "numeric"
         assert type_mapping["numeric_float"] == "numeric"
         assert type_mapping["date_col"] == "date"
@@ -212,14 +215,17 @@ class TestSMFunction:
 
     def test_sm_styled_option(self, sample_dataframe):
         """Test styled option for GT table output."""
-        # Test that styled=False returns DataFrame
-        result_df = sm(sample_dataframe, styled=False)
-        assert isinstance(result_df, pl.DataFrame)
+        # Get DataSummary object
+        result = sm(sample_dataframe)
+        assert isinstance(result, DataSummary)
         
-        # Test that styled=True raises ImportError when GT not available
+        # Test that .df returns DataFrame
+        assert isinstance(result.df, pl.DataFrame)
+        
+        # Test that .to_gt() raises ImportError when GT not available
         # (This will be the case in test environment)
         try:
-            result_gt = sm(sample_dataframe, styled=True)
+            result_gt = result.to_gt()
             # If we get here, GT is available, check it's a GT object
             assert hasattr(result_gt, '_repr_html_')  # GT objects have this method
         except ImportError as e:
