@@ -2,6 +2,14 @@
 
 A Python package for quantitative finance analysis using Polars, providing blazingly fast tools for data summarization and option pricing.
 
+## Installation
+
+```bash
+pip install git+https://github.com/matthewgson/quantpolars.git
+```
+
+**Requirements**: Python 3.8+, Polars
+
 ## Features
 
 - **Data Summary Tools**: Out-of-core data summarization for big data
@@ -29,22 +37,6 @@ The functions now work on Polars DataFrames, allowing for:
 - **Memory Efficient**: Columnar storage and lazy evaluation
 - **Scalable**: Handles billions of rows with minimal memory
 - **Parallel**: Automatic parallelization where possible
-
-## Installation
-
-### From PyPI (Recommended)
-```bash
-pip install quantpolars
-```
-
-### From Source
-```bash
-git clone https://github.com/matthewgson/quantpolars.git
-cd quantpolars
-pip install .
-```
-
-**Requirements**: Python 3.8+, Polars
 
 ## Usage
 
