@@ -112,13 +112,35 @@ class TestSMFunction:
         # Numeric stats should be None for date columns
         assert date_stats["mean"] is None
         assert date_stats["sd"] is None
+        # All quantiles should be None for date columns
         assert date_stats["p1"] is None
+        assert date_stats["p5"] is None
+        assert date_stats["p25"] is None
+        assert date_stats["p50"] is None
+        assert date_stats["p75"] is None
+        assert date_stats["p95"] is None
+        assert date_stats["p99"] is None
+        # But min and max should not be None
+        assert date_stats["min"] is not None
+        assert date_stats["max"] is not None
 
         # Check datetime_col statistics
         datetime_stats = date_results.filter(pl.col("variable") == "datetime_col").row(0, named=True)
         assert datetime_stats["nobs"] == 5
         assert datetime_stats["n_unique"] == 5
         assert datetime_stats["mean"] is None
+        assert datetime_stats["sd"] is None
+        # All quantiles should be None for datetime columns too
+        assert datetime_stats["p1"] is None
+        assert datetime_stats["p5"] is None
+        assert datetime_stats["p25"] is None
+        assert datetime_stats["p50"] is None
+        assert datetime_stats["p75"] is None
+        assert datetime_stats["p95"] is None
+        assert datetime_stats["p99"] is None
+        # But min and max should not be None
+        assert datetime_stats["min"] is not None
+        assert datetime_stats["max"] is not None
 
     def test_sm_categorical_columns(self, sample_dataframe):
         """Test statistics for categorical columns."""
