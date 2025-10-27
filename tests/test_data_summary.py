@@ -36,7 +36,7 @@ class TestSMFunction:
         assert isinstance(result, pl.DataFrame)
 
         # Check expected columns
-        expected_columns = ["variable", "type", "nobs", "mean", "sd", "p1", "p5", "p25", "p50", "p75", "p95", "p99", "n_unique"]
+        expected_columns = ["variable", "type", "nobs", "mean", "sd", "min", "max", "p1", "p5", "p25", "p50", "p75", "p95", "p99", "n_unique"]
         assert result.columns == expected_columns
 
         # Check that all variables are present
