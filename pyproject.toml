@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantpolars"
+version = "0.1.0"
+description = "A blazingly fast package for quantitative finance analysis using Polars"
+authors = [{name = "Gunsu Son"}]
+dependencies = [
+    "polars",
+]
+requires-python = ">=3.8"
+readme = "README.md"
+license = {text = "MIT"}
+
+[project.optional-dependencies]
+dev = ["pytest", "black", "flake8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
