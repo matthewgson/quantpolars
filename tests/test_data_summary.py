@@ -36,7 +36,7 @@ class TestSMFunction:
         assert isinstance(result, pl.DataFrame)
 
         # Check expected columns
-        expected_columns = ["variable", "type", "nobs", "mean", "sd", "min", "max", "p1", "p5", "p25", "p50", "p75", "p95", "p99", "n_unique"]
+        expected_columns = ["variable", "type", "nobs", "pct_missing", "mean", "sd", "min", "max", "p1", "p5", "p25", "p50", "p75", "p95", "p99", "n_unique"]
         assert result.columns == expected_columns
 
         # Check that all variables are present
@@ -84,6 +84,7 @@ class TestSMFunction:
         # Check numeric_int statistics
         int_stats = numeric_results.filter(pl.col("variable") == "numeric_int").row(0, named=True)
         assert int_stats["nobs"] == 5  # excluding None
+        assert int_stats["pct_missing"] == 16.67  # 1 None out of 6 total rows
         assert int_stats["n_unique"] == 5  # unique non-null values
         assert int_stats["mean"] == 3.0
         assert int_stats["p50"] == 3.0  # median
@@ -108,6 +109,7 @@ class TestSMFunction:
         # Check date_col statistics
         date_stats = date_results.filter(pl.col("variable") == "date_col").row(0, named=True)
         assert date_stats["nobs"] == 5
+        assert date_stats["pct_missing"] == 16.67  # 1 None out of 6 total rows
         assert date_stats["n_unique"] == 5  # 5 unique dates, null not counted
         # Numeric stats should be None for date columns
         assert date_stats["mean"] is None
@@ -155,6 +157,7 @@ class TestSMFunction:
         # Check categorical_str statistics
         str_stats = cat_results.filter(pl.col("variable") == "categorical_str").row(0, named=True)
         assert str_stats["nobs"] == 6
+        assert str_stats["pct_missing"] == 0.0  # no None values
         assert str_stats["n_unique"] == 3  # A, B, C
         assert str_stats["mean"] is None
         assert str_stats["sd"] is None
@@ -162,6 +165,7 @@ class TestSMFunction:
         # Check categorical_bool statistics
         bool_stats = cat_results.filter(pl.col("variable") == "categorical_bool").row(0, named=True)
         assert bool_stats["nobs"] == 6
+        assert bool_stats["pct_missing"] == 0.0  # no None values
         assert bool_stats["n_unique"] == 2  # True, False
         assert bool_stats["mean"] is None
 
@@ -205,3 +209,18 @@ class TestSMFunction:
         assert num_stats["mean"] == 42.0
         assert num_stats["sd"] is None  # single value has undefined std
         assert num_stats["n_unique"] == 1
+
+    def test_sm_styled_option(self, sample_dataframe):
+        """Test styled option for GT table output."""
+        # Test that styled=False returns DataFrame
+        result_df = sm(sample_dataframe, styled=False)
+        assert isinstance(result_df, pl.DataFrame)
+        
+        # Test that styled=True raises ImportError when GT not available
+        # (This will be the case in test environment)
+        try:
+            result_gt = sm(sample_dataframe, styled=True)
+            # If we get here, GT is available, check it's a GT object
+            assert hasattr(result_gt, '_repr_html_')  # GT objects have this method
+        except ImportError as e:
+            assert "great_tables" in str(e)

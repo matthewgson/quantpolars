@@ -1,20 +1,28 @@
 # Data summary tools for big data analysis
 
 import polars as pl
+from typing import Union
+try:
+    from great_tables import GT, html
+    GT_AVAILABLE = True
+except ImportError:
+    GT_AVAILABLE = False
 
 
-def sm(df):
+def sm(df: Union[pl.DataFrame, pl.LazyFrame], styled: bool = False):
     """
     Create comprehensive summary statistics for all columns in a single pass.
 
     Args:
         df: pl.DataFrame or pl.LazyFrame
+        styled: If True, return a styled GT table instead of DataFrame
 
     Returns:
-        pl.DataFrame with summary statistics
+        pl.DataFrame with summary statistics or GT table if styled=True
     """
     is_lazy = isinstance(df, pl.LazyFrame)
     schema = df.collect_schema() if is_lazy else df.schema
+    total_rows = df.select(pl.len()).collect().item() if is_lazy else len(df)
 
     # Separate columns by type
     numeric_cols = [
@@ -140,6 +148,7 @@ def sm(df):
             "variable": result[f"{col}_variable"][0],
             "type": result[f"{col}_type"][0],
             "nobs": result[f"{col}_nobs"][0],
+            "pct_missing": round(((total_rows - result[f"{col}_nobs"][0]) / total_rows) * 100, 2) if total_rows > 0 else 0.0,
             "mean": result[f"{col}_mean"][0] if col in numeric_cols else None,
             "sd": result[f"{col}_sd"][0] if col in numeric_cols else None,
             "min": result[f"{col}_min"][0] if col in numeric_cols or col in date_cols else None,
@@ -167,4 +176,48 @@ def sm(df):
         .drop("type_order")
     )
 
+    if styled:
+        if not GT_AVAILABLE:
+            raise ImportError("great_tables is required for styled output. Install with: pip install great-tables")
+        
+        # Convert to GT table with formatting - GT supports Polars DataFrames natively
+        gt_table = (
+            GT(summary_df)
+            .tab_header(
+                title="Data Summary Statistics",
+                subtitle=f"Analysis of {len(summary_df)} variables"
+            )
+            .fmt_number(
+                columns=["mean", "sd", "p1", "p5", "p25", "p50", "p75", "p95", "p99"],
+                decimals=2
+            )
+            .fmt_percent(
+                columns=["pct_missing"],
+                decimals=1
+            )
+            .fmt_date(
+                columns=["min", "max"],
+                date_style="month_day_year"
+            )
+            .cols_label(
+                variable="Variable",
+                type="Type", 
+                nobs="N Obs",
+                pct_missing="% Missing",
+                mean="Mean",
+                sd="Std Dev",
+                min="Min",
+                max="Max",
+                p1="1%",
+                p5="5%",
+                p25="25%",
+                p50="50%",
+                p75="75%",
+                p95="95%",
+                p99="99%",
+                n_unique="N Unique"
+            )
+        )
+        return gt_table
+    
     return summary_df
