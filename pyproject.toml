@@ -7,12 +7,27 @@ name = "quantpolars"
 version = "0.1.0"
 description = "A blazingly fast package for quantitative finance analysis using Polars"
 authors = [{name = "Gunsu Son"}]
-dependencies = [
-    "polars",
-]
-requires-python = ">=3.8"
-readme = "README.md"
 license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.8"
+keywords = ["finance", "quantitative", "options", "polars", "data-analysis", "high-performance"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    "polars>=0.20.0",
+]
 
 [project.optional-dependencies]
 dev = ["pytest", "black", "flake8"]
