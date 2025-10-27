@@ -5,38 +5,11 @@ A Python package for quantitative finance analysis using Polars, providing blazi
 ## Installation
 
 ```bash
-pip install git+https://github.com/matthewgson/quantpolars.git
+pip3 install git+https://github.com/matthewgson/quantpolars.git
 ```
 
 **Requirements**: Python 3.8+, Polars
 
-## Features
-
-- **Data Summary Tools**: Out-of-core data summarization for big data
-- **Option Pricing**: Black-Scholes, Cox-Ross-Rubinstein (CRR), Barone-Adesi-Whaley (BAW) models
-- **Implied Volatility**: Calculation of implied volatility
-- **Greeks**: Delta, Gamma, Theta, Vega, Rho calculators
-
-## Key Optimizations
-
-- **Removed NumPy/SciPy**: All computations now use Polars expressions and built-in math functions
-- **Vectorized DataFrame API**: Functions operate on Polars DataFrames for batch processing of multiple options
-- **Fast Norm CDF Approximation**: Implemented Abramowitz & Stegun approximation using Polars expressions
-- **Lazy Evaluation**: All operations are lazy, enabling out-of-core processing for big data
-
-## Updated API
-
-The functions now work on Polars DataFrames, allowing for:
-- **Batch Processing**: Price thousands of options in a single operation
-- **Big Data Ready**: Handles datasets larger than memory with Polars' streaming
-- **Extreme Speed**: Vectorized operations on columnar data
-
-## Performance Benefits
-
-- **No Python Loops**: All math is vectorized in Polars/Rust
-- **Memory Efficient**: Columnar storage and lazy evaluation
-- **Scalable**: Handles billions of rows with minimal memory
-- **Parallel**: Automatic parallelization where possible
 
 ## Usage
 
@@ -79,16 +52,29 @@ df = df.with_columns(
 )
 ```
 
-## Development
+## Features
 
-Install development dependencies:
+- **Data Summary Tools**: Out-of-core data summarization for big data
+- **Option Pricing**: Black-Scholes, Cox-Ross-Rubinstein (CRR), Barone-Adesi-Whaley (BAW) models
+- **Implied Volatility**: Calculation of implied volatility
+- **Greeks**: Delta, Gamma, Theta, Vega, Rho calculators
 
-```bash
-pip install -e ".[dev]"
-```
+## Key Optimizations
 
-Run tests:
+- **Vectorized DataFrame API**: Functions operate on Polars DataFrames for batch processing of multiple options
+- **Fast Norm CDF Approximation**: Implemented Abramowitz & Stegun approximation using Polars expressions
+- **Lazy Evaluation**: All operations are lazy, enabling out-of-core processing for big data
 
-```bash
-pytest
-```
+## Updated API
+
+The functions now work on Polars DataFrames, allowing for:
+- **Batch Processing**: Price thousands of options in a single operation
+- **Big Data Ready**: Handles datasets larger than memory with Polars' streaming
+- **Extreme Speed**: Vectorized operations on columnar data
+
+## Performance Benefits
+
+- **No Loops**: All math is vectorized in Polars/Rust
+- **Memory Efficient**: Columnar storage and lazy evaluation
+- **Scalable**: Handles billions of rows with minimal memory
+- **Parallel**: Automatic parallelization where possible
