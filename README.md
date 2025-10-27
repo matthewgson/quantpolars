@@ -32,9 +32,19 @@ The functions now work on Polars DataFrames, allowing for:
 
 ## Installation
 
+### From PyPI (Recommended)
 ```bash
+pip install quantpolars
+```
+
+### From Source
+```bash
+git clone https://github.com/matthewgson/quantpolars.git
+cd quantpolars
 pip install .
 ```
+
+**Requirements**: Python 3.8+, Polars
 
 ## Usage
 
