@@ -39,12 +39,57 @@ class DataSummary:
         if not GT_AVAILABLE:
             raise ImportError("great_tables is required for styled output. Install with: pip3 install great-tables")
         
+        # Create a copy of the dataframe for GT formatting
+        gt_df = self.df.clone()
+        
+        # Convert integer date representations back to date objects for date-type rows
+        from datetime import date, timedelta
+        epoch = date(1970, 1, 1)
+        
+        # Create formatted string representations for date columns
+        min_formatted = []
+        max_formatted = []
+        
+        for row in gt_df.rows():
+            var_type = row[1]  # type column
+            min_val = row[6]   # min column
+            max_val = row[7]   # max column
+            
+            if var_type == "date":
+                if min_val is not None:
+                    date_obj = epoch + timedelta(days=int(min_val))
+                    min_val = f"{date_obj.month}/{date_obj.day}/{date_obj.year}"
+                else:
+                    min_val = ""
+                if max_val is not None:
+                    date_obj = epoch + timedelta(days=int(max_val))
+                    max_val = f"{date_obj.month}/{date_obj.day}/{date_obj.year}"
+                else:
+                    max_val = ""
+            elif var_type == "numeric":
+                # Convert numeric values to strings
+                min_val = str(min_val) if min_val is not None else ""
+                max_val = str(max_val) if max_val is not None else ""
+            else:
+                # For categorical and other types
+                min_val = ""
+                max_val = ""
+            
+            min_formatted.append(min_val)
+            max_formatted.append(max_val)
+        
+        # Replace the columns with the formatted string values
+        gt_df = gt_df.with_columns([
+            pl.Series("min", min_formatted, dtype=pl.Utf8).alias("min"),
+            pl.Series("max", max_formatted, dtype=pl.Utf8).alias("max")
+        ])
+        
         # Convert to GT table with formatting - GT supports Polars DataFrames natively
         gt_table = (
-            GT(self.df)
+            GT(gt_df)
             .tab_header(
                 title="Data Summary Statistics",
-                subtitle=f"Analysis of {len(self.df)} variables"
+                subtitle=f"Analysis of {len(gt_df)} variables"
             )
             .fmt_number(
                 columns=["mean", "sd", "p1", "p5", "p25", "p50", "p75", "p95", "p99"],
@@ -53,10 +98,6 @@ class DataSummary:
             .fmt_percent(
                 columns=["pct_missing"],
                 decimals=1
-            )
-            .fmt_date(
-                columns=["min", "max"],
-                date_style="month_day_year"
             )
             .cols_label(
                 variable="Variable",

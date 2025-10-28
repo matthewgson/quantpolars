@@ -102,7 +102,7 @@ The `.to_gt()` method returns a Great Tables (GT) object that renders as a beaut
 - **Table Header**: "Data Summary Statistics" with subtitle showing variable count
 - **Formatted Numbers**: Statistics rounded to 2 decimal places
 - **Percentage Formatting**: Missing values shown as percentages (e.g., "12.5%")
-- **Date Formatting**: Min/max dates in readable format (e.g., "Jan 15, 2024")
+- **Date Formatting**: Min/max dates formatted as MM/DD/YYYY (e.g., "1/1/2023")
 - **Professional Styling**: Clean borders, alternating row colors, proper alignment
 - **Column Labels**: User-friendly names ("Std Dev" instead of "sd", "N Obs" instead of "nobs")
 
