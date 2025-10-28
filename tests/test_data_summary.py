@@ -3,7 +3,7 @@
 import pytest
 import polars as pl
 from datetime import datetime, date
-from quantpolars.data_summary import sm, DataSummary
+from quantpolars.data_summary import sm, to_gt
 
 
 class TestSMFunction:
@@ -32,23 +32,20 @@ class TestSMFunction:
         """Test sm function with a regular DataFrame."""
         result = sm(sample_dataframe)
 
-        # Check that result is a DataSummary object
-        assert isinstance(result, DataSummary)
+        # Check that result is a DataFrame
+        assert isinstance(result, pl.DataFrame)
 
-        # Check that it has a df attribute that is a DataFrame
-        assert isinstance(result.df, pl.DataFrame)
-
-        # Check expected columns
+        # Check that it has the expected columns
         expected_columns = ["variable", "type", "nobs", "pct_missing", "mean", "sd", "min", "max", "p1", "p5", "p25", "p50", "p75", "p95", "p99", "n_unique"]
-        assert result.df.columns == expected_columns
+        assert result.columns == expected_columns
 
         # Check that all variables are present
-        variables = result.df["variable"].to_list()
+        variables = result["variable"].to_list()
         expected_vars = ["date_col", "datetime_col", "categorical_str", "categorical_bool", "numeric_int", "numeric_float"]
         assert set(variables) == set(expected_vars)
 
         # Check types are correctly identified
-        type_mapping = dict(zip(result.df["variable"], result.df["type"]))
+        type_mapping = dict(zip(result["variable"], result["type"]))
         assert type_mapping["numeric_int"] == "numeric"
         assert type_mapping["numeric_float"] == "numeric"
         assert type_mapping["date_col"] == "date"
@@ -61,20 +58,17 @@ class TestSMFunction:
         lazy_df = sample_dataframe.lazy()
         result = sm(lazy_df)
 
-        # Check that result is a DataSummary object
-        assert isinstance(result, DataSummary)
-
-        # Check that it has a df attribute that is a DataFrame
-        assert isinstance(result.df, pl.DataFrame)
+        # Check that result is a DataFrame (not LazyFrame)
+        assert isinstance(result, pl.DataFrame)
 
         # Results should be the same as with DataFrame (check key values)
         df_result = sm(sample_dataframe)
-        assert result.df.shape == df_result.df.shape
-        assert result.df["variable"].equals(df_result.df["variable"])
-        assert result.df["type"].equals(df_result.df["type"])
+        assert result.shape == df_result.shape
+        assert result["variable"].equals(df_result["variable"])
+        assert result["type"].equals(df_result["type"])
         # Check a few key values
-        assert result.df.filter(pl.col("variable") == "numeric_int")["nobs"].equals(
-            df_result.df.filter(pl.col("variable") == "numeric_int")["nobs"]
+        assert result.filter(pl.col("variable") == "numeric_int")["nobs"].equals(
+            df_result.filter(pl.col("variable") == "numeric_int")["nobs"]
         )
 
     def test_sm_numeric_columns(self, sample_dataframe):
@@ -82,7 +76,7 @@ class TestSMFunction:
         result = sm(sample_dataframe)
 
         # Filter for numeric columns
-        numeric_results = result.df.filter(pl.col("type") == "numeric")
+        numeric_results = result.filter(pl.col("type") == "numeric")
 
         # Should have 2 numeric columns
         assert len(numeric_results) == 2
@@ -107,7 +101,7 @@ class TestSMFunction:
         result = sm(sample_dataframe)
 
         # Filter for date columns
-        date_results = result.df.filter(pl.col("type") == "date")
+        date_results = result.filter(pl.col("type") == "date")
 
         # Should have 2 date columns
         assert len(date_results) == 2
@@ -155,7 +149,7 @@ class TestSMFunction:
         result = sm(sample_dataframe)
 
         # Filter for categorical columns
-        cat_results = result.df.filter(pl.col("type") == "categorical")
+        cat_results = result.filter(pl.col("type") == "categorical")
 
         # Should have 2 categorical columns
         assert len(cat_results) == 2
@@ -179,7 +173,7 @@ class TestSMFunction:
         """Test that results are sorted by type: date, categorical, numeric."""
         result = sm(sample_dataframe)
 
-        types_order = result.df["type"].to_list()
+        types_order = result["type"].to_list()
         # Should be sorted: date, categorical, numeric
         expected_order = ["date", "date", "categorical", "categorical", "numeric", "numeric"]
         assert types_order == expected_order
@@ -194,8 +188,8 @@ class TestSMFunction:
         result = sm(empty_df)
 
         # Should return summary with 0 observations
-        assert len(result.df) == 2
-        assert all(row["nobs"] == 0 for row in result.df.iter_rows(named=True))
+        assert len(result) == 2
+        assert all(row["nobs"] == 0 for row in result.iter_rows(named=True))
 
     def test_sm_single_row(self):
         """Test sm function with a single row DataFrame."""
@@ -207,28 +201,25 @@ class TestSMFunction:
 
         result = sm(single_df)
 
-        assert len(result.df) == 3
-        assert all(row["nobs"] == 1 for row in result.df.iter_rows(named=True))
+        assert len(result) == 3
+        assert all(row["nobs"] == 1 for row in result.iter_rows(named=True))
 
         # Check numeric stats for single value
-        num_stats = result.df.filter(pl.col("variable") == "num").row(0, named=True)
+        num_stats = result.filter(pl.col("variable") == "num").row(0, named=True)
         assert num_stats["mean"] == 42.0
         assert num_stats["sd"] is None  # single value has undefined std
         assert num_stats["n_unique"] == 1
 
     def test_sm_styled_option(self, sample_dataframe):
         """Test styled option for GT table output."""
-        # Get DataSummary object
+        # Get summary DataFrame
         result = sm(sample_dataframe)
-        assert isinstance(result, DataSummary)
-        
-        # Test that .df returns DataFrame
-        assert isinstance(result.df, pl.DataFrame)
-        
-        # Test that .to_gt() raises ImportError when GT not available
+        assert isinstance(result, pl.DataFrame)
+
+        # Test that to_gt() raises ImportError when GT not available
         # (This will be the case in test environment)
         try:
-            result_gt = result.to_gt()
+            result_gt = to_gt(result)
             # If we get here, GT is available, check it's a GT object
             assert hasattr(result_gt, '_repr_html_')  # GT objects have this method
         except ImportError as e:

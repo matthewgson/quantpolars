@@ -12,14 +12,14 @@ pip3 install git+https://github.com/matthewgson/quantpolars.git
 
 ## Data Summary Function (`sm`)
 
-Generate comprehensive summary statistics for all columns in your DataFrame with a single function call. Returns a `DataSummary` object that provides both raw DataFrame access and styled output capabilities.
+Generate comprehensive summary statistics for all columns in your DataFrame with a single function call. Returns a Polars DataFrame with summary statistics that can be optionally converted to styled GT tables.
 
 ### Features
 
 - **Blazingly Fast**: Single-pass computation using Polars expressions
 - **Type-Aware**: Different statistics based on data type (numeric, date, categorical)
 - **Missing Data**: Includes percentage of missing values for each column
-- **Object-Oriented**: Returns `DataSummary` object with `.df` for raw data and `.to_gt()` for styled output
+- **Simple API**: Returns DataFrame directly, convert to GT styling when needed
 - **Styled Output**: Optional Great Tables formatting for beautiful HTML tables
 - **LazyFrame Support**: Works with both eager and lazy evaluation
 
@@ -51,7 +51,7 @@ df
 # Generate summary statistics
 summary = sm(df)
 print("Summary Statistics with % Missing:")
-summary.df  # Access the raw DataFrame
+summary  # This is now a Polars DataFrame directly
 ```
 
 **Output:**
@@ -91,8 +91,10 @@ shape: (5, 16)
 For beautiful formatted tables with proper date formatting:
 
 ```python
+from quantpolars import to_gt
+
 # Requires: pip3 install great-tables
-styled_summary = summary.to_gt()  # Convert to styled GT table
+styled_summary = to_gt(summary)  # Convert DataFrame to styled GT table
 styled_summary  # In Jupyter, displays as formatted HTML table
 ```
 

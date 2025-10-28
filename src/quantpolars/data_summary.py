@@ -135,7 +135,7 @@ class DataSummary:
         return self.df.__str__()
 
 
-def sm(df: Union[pl.DataFrame, pl.LazyFrame]) -> DataSummary:
+def sm(df: Union[pl.DataFrame, pl.LazyFrame]) -> pl.DataFrame:
     """
     Create comprehensive summary statistics for all columns in a single pass.
 
@@ -143,8 +143,8 @@ def sm(df: Union[pl.DataFrame, pl.LazyFrame]) -> DataSummary:
         df: pl.DataFrame or pl.LazyFrame
 
     Returns:
-        DataSummary object containing the summary statistics DataFrame.
-        Use .df to access the raw DataFrame or .to_gt() for styled output.
+        pl.DataFrame containing the summary statistics.
+        Use to_gt() function for styled GT output if desired.
     """
     is_lazy = isinstance(df, pl.LazyFrame)
     schema = df.collect_schema() if is_lazy else df.schema
@@ -279,13 +279,13 @@ def sm(df: Union[pl.DataFrame, pl.LazyFrame]) -> DataSummary:
             "sd": result[f"{col}_sd"][0] if col in numeric_cols else None,
             "min": result[f"{col}_min"][0] if col in numeric_cols or col in date_cols else None,
             "max": result[f"{col}_max"][0] if col in numeric_cols or col in date_cols else None,
-            "p1": result[f"{col}_p1"][0] if col in numeric_cols or col in date_cols else None,
-            "p5": result[f"{col}_p5"][0] if col in numeric_cols or col in date_cols else None,
-            "p25": result[f"{col}_p25"][0] if col in numeric_cols or col in date_cols else None,
-            "p50": result[f"{col}_p50"][0] if col in numeric_cols or col in date_cols else None,
-            "p75": result[f"{col}_p75"][0] if col in numeric_cols or col in date_cols else None,
-            "p95": result[f"{col}_p95"][0] if col in numeric_cols or col in date_cols else None,
-            "p99": result[f"{col}_p99"][0] if col in numeric_cols or col in date_cols else None,
+            "p1": result[f"{col}_p1"][0] if col in numeric_cols else None,
+            "p5": result[f"{col}_p5"][0] if col in numeric_cols else None,
+            "p25": result[f"{col}_p25"][0] if col in numeric_cols else None,
+            "p50": result[f"{col}_p50"][0] if col in numeric_cols else None,
+            "p75": result[f"{col}_p75"][0] if col in numeric_cols else None,
+            "p95": result[f"{col}_p95"][0] if col in numeric_cols else None,
+            "p99": result[f"{col}_p99"][0] if col in numeric_cols else None,
             "n_unique": result[f"{col}_n_unique"][0],
         }
         summary_data.append(row_dict)
@@ -302,4 +302,110 @@ def sm(df: Union[pl.DataFrame, pl.LazyFrame]) -> DataSummary:
         .drop("type_order")
     )
 
-    return DataSummary(summary_df)
+    return summary_df
+
+
+def to_gt(summary_df: pl.DataFrame) -> "GT":
+    """
+    Convert a summary statistics DataFrame to a styled GT table.
+
+    Args:
+        summary_df: DataFrame containing summary statistics (output from sm())
+
+    Returns:
+        GT table with formatted display
+
+    Raises:
+        ImportError: If great_tables is not available
+    """
+    if not GT_AVAILABLE:
+        raise ImportError("great_tables is required for styled output. Install with: pip3 install great-tables")
+
+    # Create a copy of the dataframe for GT formatting
+    gt_df = summary_df.clone()
+
+    # Convert integer date representations back to date objects for date-type rows
+    from datetime import date, timedelta
+    epoch = date(1970, 1, 1)
+
+    # Create formatted string representations for date columns
+    min_formatted = []
+    max_formatted = []
+
+    for row in gt_df.rows():
+        var_type = row[1]  # type column
+        min_val = row[6]   # min column
+        max_val = row[7]   # max column
+
+        if var_type == "date":
+            if min_val is not None:
+                # min_val should already be a date object
+                if isinstance(min_val, date):
+                    min_val = f"{min_val.month}/{min_val.day}/{min_val.year}"
+                else:
+                    min_val = ""
+            else:
+                min_val = ""
+            if max_val is not None:
+                # max_val should already be a date object
+                if isinstance(max_val, date):
+                    max_val = f"{max_val.month}/{max_val.day}/{max_val.year}"
+                else:
+                    max_val = ""
+            else:
+                max_val = ""
+        elif var_type == "numeric":
+            # Convert numeric values to strings
+            if min_val is not None:
+                min_val = str(min_val)
+            if max_val is not None:
+                max_val = str(max_val)
+        else:
+            # For categorical and other types, keep as is
+            pass
+
+        min_formatted.append(min_val)
+        max_formatted.append(max_val)
+
+    # Update the dataframe with formatted values
+    gt_df = gt_df.with_columns(
+        pl.Series("min_formatted", min_formatted),
+        pl.Series("max_formatted", max_formatted)
+    ).drop(["min", "max"]).rename({"min_formatted": "min", "max_formatted": "max"})
+
+    # Create GT table
+    gt_table = (
+        GT(gt_df)
+        .tab_header(
+            title="Data Summary Statistics",
+            subtitle="Comprehensive column analysis"
+        )
+        .fmt_percent(
+            columns=["pct_missing"],
+            decimals=1
+        )
+        .fmt_number(
+            columns=["mean", "sd", "p1", "p5", "p25", "p50", "p75", "p95", "p99"],
+            decimals=2
+        )
+        .cols_label(
+            variable="Variable",
+            type="Type",
+            nobs="N Obs",
+            pct_missing="% Missing",
+            mean="Mean",
+            sd="Std Dev",
+            min="Min",
+            max="Max",
+            p1="1%",
+            p5="5%",
+            p25="25%",
+            p50="50%",
+            p75="75%",
+            p95="95%",
+            p99="99%",
+            n_unique="N Unique"
+        )
+    )
+
+    return gt_table
