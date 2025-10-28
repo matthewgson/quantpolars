@@ -57,13 +57,19 @@ class DataSummary:
             
             if var_type == "date":
                 if min_val is not None:
-                    date_obj = epoch + timedelta(days=int(min_val))
-                    min_val = f"{date_obj.month}/{date_obj.day}/{date_obj.year}"
+                    # min_val should already be a date object
+                    if isinstance(min_val, date):
+                        min_val = f"{min_val.month}/{min_val.day}/{min_val.year}"
+                    else:
+                        min_val = ""
                 else:
                     min_val = ""
                 if max_val is not None:
-                    date_obj = epoch + timedelta(days=int(max_val))
-                    max_val = f"{date_obj.month}/{date_obj.day}/{date_obj.year}"
+                    # max_val should already be a date object
+                    if isinstance(max_val, date):
+                        max_val = f"{max_val.month}/{max_val.day}/{max_val.year}"
+                    else:
+                        max_val = ""
                 else:
                     max_val = ""
             elif var_type == "numeric":
@@ -268,7 +274,7 @@ def sm(df: Union[pl.DataFrame, pl.LazyFrame]) -> DataSummary:
             "variable": result[f"{col}_variable"][0],
             "type": result[f"{col}_type"][0],
             "nobs": result[f"{col}_nobs"][0],
-            "pct_missing": round(((total_rows - result[f"{col}_nobs"][0]) / total_rows) * 100, 2) if total_rows > 0 else 0.0,
+            "pct_missing": round((total_rows - result[f"{col}_nobs"][0]) / total_rows, 4) if total_rows > 0 else 0.0,
             "mean": result[f"{col}_mean"][0] if col in numeric_cols else None,
             "sd": result[f"{col}_sd"][0] if col in numeric_cols else None,
             "min": result[f"{col}_min"][0] if col in numeric_cols or col in date_cols else None,

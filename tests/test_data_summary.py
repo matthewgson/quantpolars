@@ -61,17 +61,20 @@ class TestSMFunction:
         lazy_df = sample_dataframe.lazy()
         result = sm(lazy_df)
 
-        # Check that result is a DataFrame (not LazyFrame)
-        assert isinstance(result, pl.DataFrame)
+        # Check that result is a DataSummary object
+        assert isinstance(result, DataSummary)
+
+        # Check that it has a df attribute that is a DataFrame
+        assert isinstance(result.df, pl.DataFrame)
 
         # Results should be the same as with DataFrame (check key values)
         df_result = sm(sample_dataframe)
-        assert result.shape == df_result.shape
-        assert result["variable"].equals(df_result["variable"])
-        assert result["type"].equals(df_result["type"])
+        assert result.df.shape == df_result.df.shape
+        assert result.df["variable"].equals(df_result.df["variable"])
+        assert result.df["type"].equals(df_result.df["type"])
         # Check a few key values
-        assert result.filter(pl.col("variable") == "numeric_int")["nobs"].equals(
-            df_result.filter(pl.col("variable") == "numeric_int")["nobs"]
+        assert result.df.filter(pl.col("variable") == "numeric_int")["nobs"].equals(
+            df_result.df.filter(pl.col("variable") == "numeric_int")["nobs"]
         )
 
     def test_sm_numeric_columns(self, sample_dataframe):
@@ -79,7 +82,7 @@ class TestSMFunction:
         result = sm(sample_dataframe)
 
         # Filter for numeric columns
-        numeric_results = result.filter(pl.col("type") == "numeric")
+        numeric_results = result.df.filter(pl.col("type") == "numeric")
 
         # Should have 2 numeric columns
         assert len(numeric_results) == 2
@@ -87,7 +90,7 @@ class TestSMFunction:
         # Check numeric_int statistics
         int_stats = numeric_results.filter(pl.col("variable") == "numeric_int").row(0, named=True)
         assert int_stats["nobs"] == 5  # excluding None
-        assert int_stats["pct_missing"] == 16.67  # 1 None out of 6 total rows
+        assert int_stats["pct_missing"] == 0.1667  # 1 None out of 6 total rows (as decimal)
         assert int_stats["n_unique"] == 5  # unique non-null values
         assert int_stats["mean"] == 3.0
         assert int_stats["p50"] == 3.0  # median
@@ -104,7 +107,7 @@ class TestSMFunction:
         result = sm(sample_dataframe)
 
         # Filter for date columns
-        date_results = result.filter(pl.col("type") == "date")
+        date_results = result.df.filter(pl.col("type") == "date")
 
         # Should have 2 date columns
         assert len(date_results) == 2
@@ -112,7 +115,7 @@ class TestSMFunction:
         # Check date_col statistics
         date_stats = date_results.filter(pl.col("variable") == "date_col").row(0, named=True)
         assert date_stats["nobs"] == 5
-        assert date_stats["pct_missing"] == 16.67  # 1 None out of 6 total rows
+        assert date_stats["pct_missing"] == 0.1667  # 1 None out of 6 total rows (as decimal)
         assert date_stats["n_unique"] == 5  # 5 unique dates, null not counted
         # Numeric stats should be None for date columns
         assert date_stats["mean"] is None
@@ -152,7 +155,7 @@ class TestSMFunction:
         result = sm(sample_dataframe)
 
         # Filter for categorical columns
-        cat_results = result.filter(pl.col("type") == "categorical")
+        cat_results = result.df.filter(pl.col("type") == "categorical")
 
         # Should have 2 categorical columns
         assert len(cat_results) == 2
@@ -176,7 +179,7 @@ class TestSMFunction:
         """Test that results are sorted by type: date, categorical, numeric."""
         result = sm(sample_dataframe)
 
-        types_order = result["type"].to_list()
+        types_order = result.df["type"].to_list()
         # Should be sorted: date, categorical, numeric
         expected_order = ["date", "date", "categorical", "categorical", "numeric", "numeric"]
         assert types_order == expected_order
@@ -191,8 +194,8 @@ class TestSMFunction:
         result = sm(empty_df)
 
         # Should return summary with 0 observations
-        assert len(result) == 2
-        assert all(row["nobs"] == 0 for row in result.iter_rows(named=True))
+        assert len(result.df) == 2
+        assert all(row["nobs"] == 0 for row in result.df.iter_rows(named=True))
 
     def test_sm_single_row(self):
         """Test sm function with a single row DataFrame."""
@@ -204,11 +207,11 @@ class TestSMFunction:
 
         result = sm(single_df)
 
-        assert len(result) == 3
-        assert all(row["nobs"] == 1 for row in result.iter_rows(named=True))
+        assert len(result.df) == 3
+        assert all(row["nobs"] == 1 for row in result.df.iter_rows(named=True))
 
         # Check numeric stats for single value
-        num_stats = result.filter(pl.col("variable") == "num").row(0, named=True)
+        num_stats = result.df.filter(pl.col("variable") == "num").row(0, named=True)
         assert num_stats["mean"] == 42.0
         assert num_stats["sd"] is None  # single value has undefined std
         assert num_stats["n_unique"] == 1
