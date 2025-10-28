@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "quantpolars"
 version = "0.2.0"
 description = "A blazingly fast package for quantitative finance analysis using Polars"
-authors = [{name = "Gunsu Son"}]
+authors = [{name = "Matthew G. Son"}]
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.8"
