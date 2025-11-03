@@ -65,17 +65,38 @@ def sm(df: Union[pl.DataFrame, pl.LazyFrame]) -> pl.DataFrame:
                 pl.lit(col).alias(f"{col}_variable"),
                 pl.lit("numeric").alias(f"{col}_type"),
                 pl.col(col).count().cast(pl.Int64).alias(f"{col}_nobs"),
-                pl.col(col).drop_nulls().mean().alias(f"{col}_mean"),
-                pl.col(col).drop_nulls().std().alias(f"{col}_sd"),
-                pl.col(col).drop_nulls().min().alias(f"{col}_min"),
-                pl.col(col).drop_nulls().max().alias(f"{col}_max"),
-                pl.col(col).drop_nulls().quantile(0.01).alias(f"{col}_p1"),
-                pl.col(col).drop_nulls().quantile(0.05).alias(f"{col}_p5"),
-                pl.col(col).drop_nulls().quantile(0.25).alias(f"{col}_p25"),
-                pl.col(col).drop_nulls().quantile(0.50).alias(f"{col}_p50"),
-                pl.col(col).drop_nulls().quantile(0.75).alias(f"{col}_p75"),
-                pl.col(col).drop_nulls().quantile(0.95).alias(f"{col}_p95"),
-                pl.col(col).drop_nulls().quantile(0.99).alias(f"{col}_p99"),
+                pl.col(col).filter(pl.col(col).is_finite()).mean().alias(f"{col}_mean"),
+                pl.col(col).filter(pl.col(col).is_finite()).std().alias(f"{col}_sd"),
+                pl.col(col).filter(pl.col(col).is_finite()).min().alias(f"{col}_min"),
+                pl.col(col).filter(pl.col(col).is_finite()).max().alias(f"{col}_max"),
+                pl.col(col)
+                .filter(pl.col(col).is_finite())
+                .quantile(0.01)
+                .alias(f"{col}_p1"),
+                pl.col(col)
+                .filter(pl.col(col).is_finite())
+                .quantile(0.05)
+                .alias(f"{col}_p5"),
+                pl.col(col)
+                .filter(pl.col(col).is_finite())
+                .quantile(0.25)
+                .alias(f"{col}_p25"),
+                pl.col(col)
+                .filter(pl.col(col).is_finite())
+                .quantile(0.50)
+                .alias(f"{col}_p50"),
+                pl.col(col)
+                .filter(pl.col(col).is_finite())
+                .quantile(0.75)
+                .alias(f"{col}_p75"),
+                pl.col(col)
+                .filter(pl.col(col).is_finite())
+                .quantile(0.95)
+                .alias(f"{col}_p95"),
+                pl.col(col)
+                .filter(pl.col(col).is_finite())
+                .quantile(0.99)
+                .alias(f"{col}_p99"),
                 # Do not compute n_unique for numeric columns per requirements
                 pl.lit(None).cast(pl.Int64).alias(f"{col}_n_unique"),
             ]
@@ -224,6 +245,9 @@ def to_gt(summary_df: pl.DataFrame) -> "GT":
     # Create a copy of the dataframe for GT formatting
     gt_df = summary_df.clone()
 
+    # Replace None values with empty strings for blank display in GT table
+    gt_df = gt_df.fill_null("")
+
     # Import for type checking and formatting
     from datetime import date
 
@@ -237,27 +261,25 @@ def to_gt(summary_df: pl.DataFrame) -> "GT":
         max_val = row[7]  # max column
 
         if var_type == "date":
-            if min_val is not None:
+            if min_val:  # min_val is not empty string
                 # min_val should already be a date object
                 if isinstance(min_val, date):
                     min_val = f"{min_val.month}/{min_val.day}/{min_val.year}"
                 else:
                     min_val = ""
-            else:
-                min_val = ""
-            if max_val is not None:
+            # else keep as empty string
+            if max_val:  # max_val is not empty string
                 # max_val should already be a date object
                 if isinstance(max_val, date):
                     max_val = f"{max_val.month}/{max_val.day}/{max_val.year}"
                 else:
                     max_val = ""
-            else:
-                max_val = ""
+            # else keep as empty string
         elif var_type == "numeric":
-            # Convert numeric values to strings
-            if min_val is not None:
+            # Convert numeric values to strings (None values are already replaced with empty strings)
+            if min_val:
                 min_val = str(min_val)
-            if max_val is not None:
+            if max_val:
                 max_val = str(max_val)
         else:
             # For categorical and other types, keep as is

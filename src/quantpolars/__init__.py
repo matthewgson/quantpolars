@@ -1,6 +1,6 @@
 # QuantPolars Package
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 from .option_pricing import black_scholes, crr_binomial, baw_american_call
 from .implied_vol import implied_volatility

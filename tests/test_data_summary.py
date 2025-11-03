@@ -137,6 +137,48 @@ class TestSMFunction:
         assert abs(float_stats["mean"] - 3.3) < 1e-10
         assert abs(float_stats["p50"] - 3.3) < 1e-10
 
+    def test_sm_numeric_nan_inf_handling(self):
+        """Test that NaN and Inf values are excluded from mean/std calculations."""
+
+        # Create DataFrame with NaN, Inf, and normal values
+        df_with_special = pl.DataFrame(
+            {
+                "mixed_numeric": [
+                    1.0,
+                    2.0,
+                    float("nan"),
+                    float("inf"),
+                    -float("inf"),
+                    3.0,
+                    4.0,
+                    None,
+                ]
+            }
+        )
+
+        result = sm(df_with_special)
+        numeric_stats = result.filter(pl.col("variable") == "mixed_numeric").row(
+            0, named=True
+        )
+
+        # Should have 7 total observations (excluding None)
+        assert numeric_stats["nobs"] == 7
+
+        # Mean should be calculated from finite values only: [1.0, 2.0, 3.0, 4.0] = 2.5
+        assert numeric_stats["mean"] == 2.5
+
+        # Std should be calculated from finite values only
+        # For [1.0, 2.0, 3.0, 4.0], std is approximately 1.290994
+        expected_std = 1.2909944487358056
+        assert abs(numeric_stats["sd"] - expected_std) < 1e-6
+
+        # Min and max should be calculated from finite values only
+        assert numeric_stats["min"] == 1.0
+        assert numeric_stats["max"] == 4.0
+
+        # Median (p50) should be 3.0 (Polars uses higher middle value for even count)
+        assert numeric_stats["p50"] == 3.0
+
     def test_sm_date_columns(self, sample_dataframe):
         """Test statistics for date/datetime columns."""
         result = sm(sample_dataframe)
