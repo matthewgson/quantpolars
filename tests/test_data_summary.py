@@ -12,21 +12,30 @@ class TestSMFunction:
     @pytest.fixture
     def sample_dataframe(self):
         """Create a sample DataFrame with various column types for testing."""
-        return pl.DataFrame({
-            "numeric_int": [1, 2, 3, 4, 5, None],
-            "numeric_float": [1.1, 2.2, 3.3, 4.4, 5.5, None],
-            "date_col": [date(2023, 1, 1), date(2023, 6, 15), date(2023, 12, 31), None, date(2023, 3, 10), date(2023, 9, 20)],
-            "datetime_col": [
-                datetime(2023, 1, 1, 10, 0),
-                datetime(2023, 6, 15, 14, 30),
-                datetime(2023, 12, 31, 23, 59),
-                None,
-                datetime(2023, 3, 10, 8, 15),
-                datetime(2023, 9, 20, 16, 45)
-            ],
-            "categorical_str": ["A", "B", "A", "C", "B", "A"],
-            "categorical_bool": [True, False, True, False, True, False]
-        })
+        return pl.DataFrame(
+            {
+                "numeric_int": [1, 2, 3, 4, 5, None],
+                "numeric_float": [1.1, 2.2, 3.3, 4.4, 5.5, None],
+                "date_col": [
+                    date(2023, 1, 1),
+                    date(2023, 6, 15),
+                    date(2023, 12, 31),
+                    None,
+                    date(2023, 3, 10),
+                    date(2023, 9, 20),
+                ],
+                "datetime_col": [
+                    datetime(2023, 1, 1, 10, 0),
+                    datetime(2023, 6, 15, 14, 30),
+                    datetime(2023, 12, 31, 23, 59),
+                    None,
+                    datetime(2023, 3, 10, 8, 15),
+                    datetime(2023, 9, 20, 16, 45),
+                ],
+                "categorical_str": ["A", "B", "A", "C", "B", "A"],
+                "categorical_bool": [True, False, True, False, True, False],
+            }
+        )
 
     def test_sm_with_dataframe(self, sample_dataframe):
         """Test sm function with a regular DataFrame."""
@@ -36,12 +45,36 @@ class TestSMFunction:
         assert isinstance(result, pl.DataFrame)
 
         # Check that it has the expected columns
-        expected_columns = ["variable", "type", "nobs", "pct_missing", "mean", "sd", "min", "max", "p1", "p5", "p25", "p50", "p75", "p95", "p99", "n_unique"]
+        expected_columns = [
+            "variable",
+            "type",
+            "nobs",
+            "pct_missing",
+            "mean",
+            "sd",
+            "min",
+            "max",
+            "p1",
+            "p5",
+            "p25",
+            "p50",
+            "p75",
+            "p95",
+            "p99",
+            "n_unique",
+        ]
         assert result.columns == expected_columns
 
         # Check that all variables are present
         variables = result["variable"].to_list()
-        expected_vars = ["date_col", "datetime_col", "categorical_str", "categorical_bool", "numeric_int", "numeric_float"]
+        expected_vars = [
+            "date_col",
+            "datetime_col",
+            "categorical_str",
+            "categorical_bool",
+            "numeric_int",
+            "numeric_float",
+        ]
         assert set(variables) == set(expected_vars)
 
         # Check types are correctly identified
@@ -82,17 +115,25 @@ class TestSMFunction:
         assert len(numeric_results) == 2
 
         # Check numeric_int statistics
-        int_stats = numeric_results.filter(pl.col("variable") == "numeric_int").row(0, named=True)
+        int_stats = numeric_results.filter(pl.col("variable") == "numeric_int").row(
+            0, named=True
+        )
         assert int_stats["nobs"] == 5  # excluding None
-        assert int_stats["pct_missing"] == 0.1667  # 1 None out of 6 total rows (as decimal)
-        assert int_stats["n_unique"] == 5  # unique non-null values
+        assert (
+            int_stats["pct_missing"] == 0.1667
+        )  # 1 None out of 6 total rows (as decimal)
+        # Do not compute n_unique for numeric columns
+        assert int_stats["n_unique"] is None
         assert int_stats["mean"] == 3.0
         assert int_stats["p50"] == 3.0  # median
 
         # Check numeric_float statistics
-        float_stats = numeric_results.filter(pl.col("variable") == "numeric_float").row(0, named=True)
+        float_stats = numeric_results.filter(pl.col("variable") == "numeric_float").row(
+            0, named=True
+        )
         assert float_stats["nobs"] == 5
-        assert float_stats["n_unique"] == 5
+        # Do not compute n_unique for numeric columns
+        assert float_stats["n_unique"] is None
         assert abs(float_stats["mean"] - 3.3) < 1e-10
         assert abs(float_stats["p50"] - 3.3) < 1e-10
 
@@ -107,9 +148,13 @@ class TestSMFunction:
         assert len(date_results) == 2
 
         # Check date_col statistics
-        date_stats = date_results.filter(pl.col("variable") == "date_col").row(0, named=True)
+        date_stats = date_results.filter(pl.col("variable") == "date_col").row(
+            0, named=True
+        )
         assert date_stats["nobs"] == 5
-        assert date_stats["pct_missing"] == 0.1667  # 1 None out of 6 total rows (as decimal)
+        assert (
+            date_stats["pct_missing"] == 0.1667
+        )  # 1 None out of 6 total rows (as decimal)
         assert date_stats["n_unique"] == 5  # 5 unique dates, null not counted
         # Numeric stats should be None for date columns
         assert date_stats["mean"] is None
@@ -127,9 +172,12 @@ class TestSMFunction:
         assert date_stats["max"] is not None
 
         # Check datetime_col statistics
-        datetime_stats = date_results.filter(pl.col("variable") == "datetime_col").row(0, named=True)
+        datetime_stats = date_results.filter(pl.col("variable") == "datetime_col").row(
+            0, named=True
+        )
         assert datetime_stats["nobs"] == 5
-        assert datetime_stats["n_unique"] == 5
+        # Do not compute n_unique for datetime columns
+        assert datetime_stats["n_unique"] is None
         assert datetime_stats["mean"] is None
         assert datetime_stats["sd"] is None
         # All quantiles should be None for datetime columns too
@@ -155,7 +203,9 @@ class TestSMFunction:
         assert len(cat_results) == 2
 
         # Check categorical_str statistics
-        str_stats = cat_results.filter(pl.col("variable") == "categorical_str").row(0, named=True)
+        str_stats = cat_results.filter(pl.col("variable") == "categorical_str").row(
+            0, named=True
+        )
         assert str_stats["nobs"] == 6
         assert str_stats["pct_missing"] == 0.0  # no None values
         assert str_stats["n_unique"] == 3  # A, B, C
@@ -163,7 +213,9 @@ class TestSMFunction:
         assert str_stats["sd"] is None
 
         # Check categorical_bool statistics
-        bool_stats = cat_results.filter(pl.col("variable") == "categorical_bool").row(0, named=True)
+        bool_stats = cat_results.filter(pl.col("variable") == "categorical_bool").row(
+            0, named=True
+        )
         assert bool_stats["nobs"] == 6
         assert bool_stats["pct_missing"] == 0.0  # no None values
         assert bool_stats["n_unique"] == 2  # True, False
@@ -175,15 +227,21 @@ class TestSMFunction:
 
         types_order = result["type"].to_list()
         # Should be sorted: date, categorical, numeric
-        expected_order = ["date", "date", "categorical", "categorical", "numeric", "numeric"]
+        expected_order = [
+            "date",
+            "date",
+            "categorical",
+            "categorical",
+            "numeric",
+            "numeric",
+        ]
         assert types_order == expected_order
 
     def test_sm_empty_dataframe(self):
         """Test sm function with an empty DataFrame."""
-        empty_df = pl.DataFrame({
-            "col1": [],
-            "col2": []
-        }).cast({"col1": pl.Int64, "col2": pl.Utf8})
+        empty_df = pl.DataFrame({"col1": [], "col2": []}).cast(
+            {"col1": pl.Int64, "col2": pl.Utf8}
+        )
 
         result = sm(empty_df)
 
@@ -193,11 +251,9 @@ class TestSMFunction:
 
     def test_sm_single_row(self):
         """Test sm function with a single row DataFrame."""
-        single_df = pl.DataFrame({
-            "num": [42],
-            "cat": ["test"],
-            "dt": [date(2023, 1, 1)]
-        })
+        single_df = pl.DataFrame(
+            {"num": [42], "cat": ["test"], "dt": [date(2023, 1, 1)]}
+        )
 
         result = sm(single_df)
 
@@ -208,7 +264,8 @@ class TestSMFunction:
         num_stats = result.filter(pl.col("variable") == "num").row(0, named=True)
         assert num_stats["mean"] == 42.0
         assert num_stats["sd"] is None  # single value has undefined std
-        assert num_stats["n_unique"] == 1
+        # Do not compute n_unique for numeric columns
+        assert num_stats["n_unique"] is None
 
     def test_sm_styled_option(self, sample_dataframe):
         """Test styled option for GT table output."""
@@ -221,6 +278,6 @@ class TestSMFunction:
         try:
             result_gt = to_gt(result)
             # If we get here, GT is available, check it's a GT object
-            assert hasattr(result_gt, '_repr_html_')  # GT objects have this method
+            assert hasattr(result_gt, "_repr_html_")  # GT objects have this method
         except ImportError as e:
             assert "great_tables" in str(e)

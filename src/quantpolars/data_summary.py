@@ -45,7 +45,10 @@ def sm(df: Union[pl.DataFrame, pl.LazyFrame]) -> pl.DataFrame:
             pl.Decimal,
         ]
     ]
-    date_cols = [c for c, t in schema.items() if t in [pl.Date, pl.Datetime]]
+    # Split date-like columns into Date vs Datetime so we can treat them differently
+    date_cols_date = [c for c, t in schema.items() if t == pl.Date]
+    datetime_cols = [c for c, t in schema.items() if t == pl.Datetime]
+    date_cols = date_cols_date + datetime_cols
     categorical_cols = [
         c for c in schema.keys() if c not in numeric_cols and c not in date_cols
     ]
@@ -73,17 +76,16 @@ def sm(df: Union[pl.DataFrame, pl.LazyFrame]) -> pl.DataFrame:
                 pl.col(col).drop_nulls().quantile(0.75).alias(f"{col}_p75"),
                 pl.col(col).drop_nulls().quantile(0.95).alias(f"{col}_p95"),
                 pl.col(col).drop_nulls().quantile(0.99).alias(f"{col}_p99"),
+                # Do not compute n_unique for numeric columns per requirements
                 pl.lit(None).cast(pl.Int64).alias(f"{col}_n_unique"),
             ]
         ]
         all_stats.extend(numeric_stats)
 
-    # Date columns - vectorized operations
+    # Date columns - vectorized operations, but only compute n_unique for Date (not Datetime)
     if date_cols:
-        date_stats = [
-            stat_expr
-            for col in date_cols
-            for stat_expr in [
+        for col in date_cols:
+            common_exprs = [
                 pl.lit(col).alias(f"{col}_variable"),
                 pl.lit("date").alias(f"{col}_type"),
                 pl.col(col).count().cast(pl.Int64).alias(f"{col}_nobs"),
@@ -98,14 +100,20 @@ def sm(df: Union[pl.DataFrame, pl.LazyFrame]) -> pl.DataFrame:
                 pl.lit(None).cast(pl.Float64).alias(f"{col}_p75"),
                 pl.lit(None).cast(pl.Float64).alias(f"{col}_p95"),
                 pl.lit(None).cast(pl.Float64).alias(f"{col}_p99"),
-                pl.col(col)
-                .drop_nulls()
-                .n_unique()
-                .cast(pl.Int64)
-                .alias(f"{col}_n_unique"),
             ]
-        ]
-        all_stats.extend(date_stats)
+            all_stats.extend(common_exprs)
+
+            # Only compute n_unique for Date columns; leave as null for Datetime
+            if schema[col] == pl.Date:
+                all_stats.append(
+                    pl.col(col)
+                    .drop_nulls()
+                    .n_unique()
+                    .cast(pl.Int64)
+                    .alias(f"{col}_n_unique")
+                )
+            else:
+                all_stats.append(pl.lit(None).cast(pl.Int64).alias(f"{col}_n_unique"))
 
     # Categorical columns - vectorized operations
     if categorical_cols:
@@ -216,10 +224,8 @@ def to_gt(summary_df: pl.DataFrame) -> "GT":
     # Create a copy of the dataframe for GT formatting
     gt_df = summary_df.clone()
 
-    # Convert integer date representations back to date objects for date-type rows
-    from datetime import date, timedelta
-
-    epoch = date(1970, 1, 1)
+    # Import for type checking and formatting
+    from datetime import date
 
     # Create formatted string representations for date columns
     min_formatted = []
