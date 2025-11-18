@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quantpolars"
-version = "0.3.0"
+version = "0.3.1"
 description = "A blazingly fast package for quantitative finance analysis using Polars"
 authors = [{name = "Matthew G. Son"}]
 license = {text = "MIT"}
@@ -27,6 +27,7 @@ classifiers = [
 ]
 dependencies = [
     "polars>=0.20.0",
+    "scipy>=1.9.0",
 ]
 
 [project.optional-dependencies]
