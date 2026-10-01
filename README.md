@@ -126,43 +126,126 @@ The `.to_gt()` method returns a Great Tables (GT) object that renders as a beaut
 - **Date**: Min/max dates only (percentiles not supported by Polars)
 - **Categorical**: Unique counts only
 
-### Out-of-Core Example
+## Option Pricing, Greeks and Implied Volatility
+
+Everything in this section compiles to Polars expressions: no Python UDFs, no
+NumPy, no SciPy at run time. The functions therefore run inside lazy and
+streaming queries, parallelise across cores, and work on frames larger than
+memory.
 
 ```python
 import polars as pl
 import quantpolars as qp
 
-# Batch price 1M options
-df = pl.scan_csv("options_data.csv")  # Out-of-core
-df = df.with_columns(
-    price = qp.black_scholes(df, 'S', 'K', 'T', 'r', 'sigma', 'call')['price']
-)
+df = pl.DataFrame({
+    "S": [5900.0, 5900.0], "K": [5950.0, 5850.0], "T": [1 / 252, 30 / 365],
+    "r": [0.0425, 0.0425], "q": [0.013, 0.013], "cp": ["C", "P"], "mkt": [12.40, 41.10],
+})
+
+# implied volatility from observed prices (null where no vol reprices the quote)
+df = qp.implied_volatility(df, "S", "K", "T", "r", "mkt", option_type="cp", q_col="q")
+
+# Greeks at that volatility
+df = qp.calculate_greeks(df, "S", "K", "T", "r", "implied_vol", option_type="cp", q_col="q",
+                         greeks=("delta", "gamma", "vega", "theta", "vanna", "charm"),
+                         theta_per_day=True)
+
+# model price (returns the frame with a `price` column)
+df = qp.black_scholes(df, "S", "K", "T", "r", "implied_vol", option_type="cp", q_col="q")
 ```
 
-## Features
+Every argument may be a column name, a Polars expression, or a scalar. The
+option type is a literal `'call'`/`'put'` or a column of per-row flags
+(`'C'`/`'P'`, `'call'`/`'put'`, booleans, or `+1`/`-1`). LazyFrame in, LazyFrame
+out; a DataFrame is evaluated with the streaming engine, which is the fast path
+(see *Performance*). Expression-level versions (`bs_price`, `black76_price`,
+`bs_greeks`) return `pl.Expr` for use inside your own `select`/`with_columns`.
 
-- **Data Summary Tools**: Out-of-core data summarization for big data
-- **Option Pricing**: Black-Scholes, Cox-Ross-Rubinstein (CRR), Barone-Adesi-Whaley (BAW) models
-- **Implied Volatility**: Calculation of implied volatility
-- **Greeks**: Delta, Gamma, Theta, Vega, Rho calculators
+### Functions
 
-## Key Optimizations
+| Function | What it adds |
+|---|---|
+| `black_scholes(df, S, K, T, r, sigma, option_type, q_col=0, out_col="price")` | Black-Scholes-Merton price with a continuous dividend yield |
+| `black76(df, F, K, T, r, sigma, option_type, out_col="price")` | Black-76 price on a forward |
+| `implied_volatility(df, S, K, T, r, market, option_type, q_col=0, out_col="implied_vol", max_iter=8, diagnostics=False)` | implied volatility; null outside the no-arbitrage band or at expiry |
+| `implied_volatility_black76(df, F, K, T, r, market, option_type, ...)` | the same from a forward |
+| `calculate_greeks(df, S, K, T, r, sigma, option_type, q_col=0, greeks=(...), theta_per_day=False, prefix="")` | any of `delta gamma vega theta rho vanna vomma charm dual_delta` |
+| `bs_price`, `black76_price`, `bs_greeks` | expression-level equivalents |
+| `norm_cdf`, `norm_sf`, `norm_pdf`, `norm_ppf`, `erf`, `erfc`, `erfcx` | standard-normal expressions, double precision |
 
-- **Vectorized DataFrame API**: Functions operate on Polars DataFrames for batch processing of multiple options
-- **Fast Norm CDF Approximation**: Implemented Abramowitz & Stegun approximation using Polars expressions
-- **Lazy Evaluation**: All operations are lazy, enabling out-of-core processing for big data
+Conventions: `T` in years, `r` and `q` continuously compounded, `sigma`
+annualised. Vega is per unit of volatility (divide by 100 for "per vol point"),
+theta per year unless `theta_per_day=True`, rho per unit of rate. At or past
+expiry the price is intrinsic value, delta the exercise indicator and the other
+Greeks zero; null inputs give null outputs.
 
-## Updated API
+### Accuracy
 
-The functions now work on Polars DataFrames, allowing for:
+* `erf`, `erfc`, `erfcx` implement Cody's (1969) rational Chebyshev
+  approximations; `norm_ppf` implements Wichura's AS241. All agree with SciPy
+  to about 1e-15 relative error over the whole real line, including the tails
+  (`norm_cdf(-37)` is 5.7e-300, not zero). The previous Abramowitz-Stegun
+  approximation had a 7e-8 absolute error, which is a 5% *relative* error
+  three standard deviations out, exactly where deep out-of-the-money option
+  prices live.
+* Prices and Greeks match the closed forms to 1e-12 absolute (prices on an
+  index at 5900) and 1e-14 (delta).
+* Implied volatility follows the structure of Jaeckel's *Let's Be Rational*:
+  the option is mapped to its out-of-the-money twin by put-call parity and
+  expressed in the normalised Black form `b(v)`, `v = sigma sqrt(T)`; the
+  closed-form Stefanica-Radoicic (2017) approximation gives the start; eight
+  safeguarded Halley steps on `ln b(v)` finish, with a bracket that falls back
+  to bisection so the iteration cannot diverge. `b` is evaluated through
+  `erfcx`, so prices as small as 1e-300 of the geometric mean of forward and
+  strike are inverted at full precision. On a 1,386-point grid with 50-digit
+  reference prices (strikes 4000-9000 on a 5900 index, maturities from 30
+  seconds to 3 years, volatilities 3%-300%) the solver reproduces the true
+  volatility to 1e-10 or better on every row where `py_vollib`'s
+  Let's-Be-Rational does, and fails on the same rows, which are the ones whose
+  extrinsic value is below the double-precision resolution of the price.
 
-- **Batch Processing**: Price thousands of options in a single operation
-- **Big Data Ready**: Handles datasets larger than memory with Polars' streaming
-- **Extreme Speed**: Vectorized operations on columnar data
+### Performance
 
-## Performance Benefits
+Measured on a 128-core Linux box, Polars 1.42, 9.2 million synthetic options
+(the `benchmarks/bench_synthetic.py` script) and on one day of the Cboe SPX
+tape (871k executions, `benchmarks/bench_tbt.py`):
 
-- **No Loops**: All vectorized in Polars/Rust
-- **Memory Efficient**: Columnar storage and lazy evaluation
-- **Scalable**: Handles billions of rows with minimal memory
-- **Parallel**: Automatic parallelization where possible
+| Task | NumPy + SciPy (1 thread) | quantpolars | Speed-up |
+|---|---|---|---|
+| Black-Scholes price | 2.6 M rows/s | 58 M rows/s | 22x |
+| Five Greeks | 2.1 M rows/s | 58 M rows/s | 28x |
+| Implied volatility | 0.055 M rows/s (60-step bisection) | 3.8 M rows/s | 70x |
+| Implied volatility, `py_vollib` scalar Let's Be Rational loop | 0.025 M rows/s | 3.8 M rows/s | 150x |
+
+The implied-volatility rate depends on the frame size, because the streaming
+engine parallelises over morsels of rows: 0.9 M rows/s on the 871k-row tape
+day, 3.8 M rows/s on 9.2 M rows. Four Halley steps instead of eight double the
+rate and are enough for ordinary quotes; the default of eight covers the deep
+tails. On the 100k real executions checked, the volatilities agree with
+`py_vollib`'s Let's Be Rational to 1.3e-12 relative. (`py_vollib_vectorized`
+did not compile under the numba available here and is not in the table.)
+
+Two things matter for speed, and both are built into the frame-level functions:
+
+1. **Materialise shared intermediates.** `d1`, `d2`, `N(d1)`, `N(d2)` and the
+   density are computed once as temporary columns and shared by every output.
+   A single self-contained expression per Greek recomputes them, and under the
+   streaming engine that costs far more than the arithmetic itself.
+2. **Use the streaming engine.** Polars' in-memory engine parallelises across
+   the expressions in a `with_columns`, not across rows, so an eight-step
+   solver with three expressions per step uses three cores. The streaming
+   engine splits the rows into morsels and uses every core. A DataFrame
+   passed to any frame-level function is evaluated this way automatically; if
+   you pass a LazyFrame, collect it with `.collect(engine="streaming")`.
+
+### Changes in 0.4.0
+
+* `implied_volatility` and `calculate_greeks` in 0.3.x did not run on current
+  Polars (`pl.pi` does not exist, and the Newton loop referenced columns it had
+  dropped); both are rewritten.
+* Dividend yield (`q_col`), per-row option-type flags, expiry and zero-volatility
+  handling, null propagation, Black-76 variants, four more Greeks, and
+  `norm_ppf`/`erfcx` are new.
+* `crr_binomial` and `baw_american_call` were placeholders that returned the
+  Black-Scholes price; they still do, and now warn.
+* Requires Polars 1.0 or later.
