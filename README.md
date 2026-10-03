@@ -206,24 +206,56 @@ Greeks zero; null inputs give null outputs.
 
 ### Performance
 
-Measured on a 128-core Linux box, Polars 1.42, 9.2 million synthetic options
-(the `benchmarks/bench_synthetic.py` script) and on one day of the Cboe SPX
-tape (871k executions, `benchmarks/bench_tbt.py`):
+#### Against other packages
 
-| Task | NumPy + SciPy (1 thread) | quantpolars | Speed-up |
-|---|---|---|---|
-| Black-Scholes price | 2.6 M rows/s | 58 M rows/s | 22x |
-| Five Greeks | 2.1 M rows/s | 58 M rows/s | 28x |
-| Implied volatility | 0.055 M rows/s (60-step bisection) | 3.8 M rows/s | 70x |
-| Implied volatility, `py_vollib` scalar Let's Be Rational loop | 0.025 M rows/s | 3.8 M rows/s | 150x |
+Same rows, same machine (128-core Linux, Python 3.13, Polars 1.42.1,
+NumPy 2.2.6, SciPy 1.18.1, numba 0.61.2), `benchmarks/bench_packages.py`:
+1.67 million synthetic options (strikes 5000-6800 on a 5900 index, one hour to
+one year to expiry, volatilities 5%-100%, calls and puts, zero dividend yield
+so that every package can price them). Packages with a scalar API run in a
+Python loop over 50,000 rows and the pure-Python ones over 5,000 rows, so the
+rates are comparable but the samples are not. Rates in million rows per second;
+implied-vol accuracy is the median relative error against the true volatility.
 
-The implied-volatility rate depends on the frame size, because the streaming
-engine parallelises over morsels of rows: 0.9 M rows/s on the 871k-row tape
-day, 3.8 M rows/s on 9.2 M rows. Four Halley steps instead of eight double the
-rate and are enough for ordinary quotes; the default of eight covers the deep
-tails. On the 100k real executions checked, the volatilities agree with
-`py_vollib`'s Let's Be Rational to 1.3e-12 relative. (`py_vollib_vectorized`
-did not compile under the numba available here and is not in the table.)
+| Package | Price | Delta | Implied vol | IV accuracy | Notes |
+|---|---|---|---|---|---|
+| quantpolars, 128 threads | 11.9 | 23.9 | 1.54 | 1.8e-15 | |
+| quantpolars, 1 thread | 1.6 | 2.1 | 0.10 | 1.8e-15 | |
+| pyfeng 0.5 (NumPy, 1 thread) | 11.0 | 20.3 | 1.34 | 1.6e-15 | |
+| NumPy + SciPy closed forms (1 thread) | 4.2 | 10.2 | 0.07 | 1.7e-15 | implied vol by 60-step bisection |
+| financepy 1.0 (numba, 1 thread) | 6.6 | 7.9 | 0.015 | 1.2e-6 | price error up to 8e-4 (approximate CDF) |
+| QuantLib 1.43 (scalar) | 0.39 | 0.13 | 0.24 | 3.6e-13 | solver accuracy set to 1e-12 |
+| vollib 1.0 / py_vollib (scalar) | 0.14 | 0.14 | 0.026 | 1.6e-15 | Let's Be Rational, pure Python |
+| blackscholes 0.2 (pure Python) | 0.22 | 0.35 | none | | |
+| mibian 0.1 (pure Python) | 0.001 | | 0.0001 | 2.1e-9 | no dividend yield |
+
+`py_vollib_vectorized` does not import on Python 3.13 with a current numba and
+could not be run.
+
+What the table says, honestly:
+
+* **Per core, NumPy is faster.** pyfeng's NumPy implementation is the fastest
+  single-threaded package on every task, and the plain NumPy + SciPy closed
+  forms beat single-threaded quantpolars by 2.6x on price and 4.8x on delta.
+  Polars evaluates each operator as its own pass over the column, NumPy's C
+  loops do the same, but SciPy's `norm.cdf` is one call where Cody's rational
+  functions are forty.
+* **quantpolars wins by using every core without any extra code**, and by
+  running inside a lazy or streaming Polars query on frames that do not fit in
+  memory. On this machine that gives 24 M deltas and 1.5 M implied vols per
+  second on 1.7 M rows, and 58 M and 3.8 M on 9.2 M rows, where the streaming
+  engine has more morsels to spread.
+* **Implied volatility is where the solver matters.** The NumPy bisection and
+  the pure-Python solvers are one to two orders of magnitude slower; financepy
+  and mibian also lose six to nine digits. quantpolars, pyfeng, vollib and
+  QuantLib all recover the volatility to machine precision.
+
+#### On the real tape
+
+One day of the Cboe SPX options tape (871k executions, `benchmarks/bench_tbt.py`):
+0.9 M implied vols per second with eight Halley steps, 1.7 M with four, and
+13-14 M prices or Greeks per second. On the 100k real executions checked, the
+volatilities agree with vollib's Let's Be Rational to 1.3e-12 relative.
 
 Two things matter for speed, and both are built into the frame-level functions:
 
