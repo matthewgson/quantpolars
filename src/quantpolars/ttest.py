@@ -1,15 +1,71 @@
 # Welch's t-test implementations for Polars DataFrames
+#
+# Each test is one vectorised Polars aggregation (all groups at once) followed by
+# a Rust Student-t kernel for the p-values, so cost is a single pass over the data
+# regardless of the number of groups.
 
 import polars as pl
-from typing import Union, Optional, Literal
-import math
+from typing import List, Literal, Optional, Union
+
+from ._plugin import call
+
+Alternative = Literal["two-sided", "greater", "less"]
+
+
+def t_pvalue(t: pl.Expr, df: pl.Expr, alternative: Alternative = "two-sided") -> pl.Expr:
+    """Student-t p-value expression for a t statistic and degrees of freedom."""
+    if alternative not in ("two-sided", "greater", "less"):
+        raise ValueError(f"alternative must be 'two-sided', 'greater' or 'less', got {alternative!r}")
+    return call("t_pvalue", t, df, kwargs={"alternative": alternative})
+
+
+def _prepare(df, columns: List[str], group_by) -> tuple:
+    lf = df.lazy()
+    names = lf.collect_schema().names()
+    for col in columns:
+        if col not in names:
+            raise ValueError(f"Column '{col}' not found in DataFrame")
+    by = [group_by] if isinstance(group_by, str) else list(group_by or [])
+    for col in by:
+        if col not in names:
+            raise ValueError(f"Group column '{col}' not found in DataFrame")
+    return lf, by
+
+
+def _aggregate(lf: pl.LazyFrame, by: List[str], aggs: List[pl.Expr]) -> pl.LazyFrame:
+    if by:
+        return lf.group_by(by, maintain_order=True).agg(aggs)
+    return lf.select(aggs)
+
+
+def _finish(stats: pl.LazyFrame, ok: pl.Expr, t: pl.Expr, dof: pl.Expr,
+            nullable: List[str], alternative: Alternative, order: List[str]) -> pl.DataFrame:
+    """Mask insufficient samples, add p-values, and order columns."""
+    return (
+        stats.with_columns(
+            t_statistic=t,
+            df=dof.cast(pl.Float64),
+        )
+        .with_columns([pl.when(ok).then(pl.col(c)).alias(c) for c in nullable + ["t_statistic", "df"]])
+        .with_columns(p_value=t_pvalue(pl.col("t_statistic"), pl.col("df"), alternative))
+        .with_columns(
+            alternative=pl.lit(alternative),
+            **{"significant_at_0.05": pl.col("p_value") < 0.05},
+        )
+        .select(order)
+        .collect()
+    )
+
+
+_RESULT_TAIL = ["t_statistic", "df", "p_value", "alternative", "significant_at_0.05"]
+_TWO_SAMPLE = ["n1", "n2", "mean1", "mean2", "std1", "std2"]
 
 
 def one_t(
     df: Union[pl.DataFrame, pl.LazyFrame],
     column: str,
     mu: float = 0.0,
-    alternative: Literal["two-sided", "greater", "less"] = "two-sided",
+    alternative: Alternative = "two-sided",
     group_by: Optional[Union[str, list[str]]] = None,
 ) -> pl.DataFrame:
     """
@@ -39,98 +95,40 @@ def one_t(
             - alternative: direction of test
             - significant_at_0.05: boolean indicator
     """
-    is_lazy = isinstance(df, pl.LazyFrame)
-    working_df = df if not is_lazy else df.collect()
+    lf, by = _prepare(df, [column], group_by)
+    x = pl.col(column)
+    stats = _aggregate(lf, by, [
+        x.count().cast(pl.Int64).alias("n"),
+        x.mean().alias("mean"),
+        x.std().alias("std"),
+    ])
+    n, mean, std = pl.col("n"), pl.col("mean"), pl.col("std")
+    return _finish(
+        stats,
+        ok=n >= 2,
+        t=(mean - mu) / (std / n.sqrt()),
+        dof=n - 1,
+        nullable=["mean", "std"],
+        alternative=alternative,
+        order=by + ["n", "mean", "std"] + _RESULT_TAIL,
+    )
 
-    # Validate column exists
-    if column not in working_df.columns:
-        raise ValueError(f"Column '{column}' not found in DataFrame")
 
-    # Define the test function
-    def perform_test(data: pl.DataFrame) -> dict:
-        """Perform one-sample t-test on a group."""
-        # Filter out nulls and get values
-        values = data.select(pl.col(column).drop_nulls()).to_series()
-        n = len(values)
-
-        if n < 2:
-            return {
-                "n": n,
-                "mean": None,
-                "std": None,
-                "t_statistic": None,
-                "df": None,
-                "p_value": None,
-                "alternative": alternative,
-                "significant_at_0.05": None,
-            }
-
-        # Calculate statistics
-        mean = values.mean()
-        std = values.std()
-        se = std / math.sqrt(n)
-
-        # Calculate t-statistic
-        t_stat = (mean - mu) / se if se > 0 else float("inf")
-
-        # Degrees of freedom
-        df_val = n - 1
-
-        # Calculate p-value using Student's t-distribution approximation
-        from scipy import stats
-
-        if alternative == "two-sided":
-            p_value = 2 * (1 - stats.t.cdf(abs(t_stat), df_val))
-        elif alternative == "greater":
-            p_value = 1 - stats.t.cdf(t_stat, df_val)
-        else:  # less
-            p_value = stats.t.cdf(t_stat, df_val)
-
-        return {
-            "n": n,
-            "mean": float(mean),
-            "std": float(std),
-            "t_statistic": float(t_stat),
-            "df": float(df_val),
-            "p_value": float(p_value),
-            "alternative": alternative,
-            "significant_at_0.05": p_value < 0.05,
-        }
-
-    # Perform test(s)
-    if group_by is None:
-        # Single test on entire dataset
-        result = perform_test(working_df)
-        result_df = pl.DataFrame([result])
-    else:
-        # Group by and perform tests
-        if isinstance(group_by, str):
-            group_by = [group_by]
-
-        # Validate group columns exist
-        for col in group_by:
-            if col not in working_df.columns:
-                raise ValueError(f"Group column '{col}' not found in DataFrame")
-
-        groups = working_df.group_by(group_by, maintain_order=True)
-        results = []
-
-        for group_values, group_df in groups:
-            result = perform_test(group_df)
-            # Add group values
-            if len(group_by) == 1:
-                result[group_by[0]] = group_values
-            else:
-                for i, col in enumerate(group_by):
-                    result[col] = group_values[i]
-            results.append(result)
-
-        result_df = pl.DataFrame(results)
-        # Reorder columns to put group columns first
-        other_cols = [c for c in result_df.columns if c not in group_by]
-        result_df = result_df.select(group_by + other_cols)
-
-    return result_df
+def _welch(stats: pl.LazyFrame, alternative: Alternative, order: List[str]) -> pl.DataFrame:
+    n1, n2 = pl.col("n1"), pl.col("n2")
+    a = pl.col("std1").pow(2) / n1
+    b = pl.col("std2").pow(2) / n2
+    welch_df = (a + b).pow(2) / (a.pow(2) / (n1 - 1) + b.pow(2) / (n2 - 1))
+    dof = pl.when((a > 0) & (b > 0)).then(welch_df).otherwise(n1 + n2 - 2)
+    return _finish(
+        stats,
+        ok=(n1 >= 2) & (n2 >= 2),
+        t=(pl.col("mean1") - pl.col("mean2")) / (a + b).sqrt(),
+        dof=dof,
+        nullable=["mean1", "mean2", "std1", "std2"],
+        alternative=alternative,
+        order=order,
+    )
 
 
 def two_t(
@@ -138,7 +136,7 @@ def two_t(
     column1: str,
     column2: Optional[str] = None,
     group_column: Optional[str] = None,
-    alternative: Literal["two-sided", "greater", "less"] = "two-sided",
+    alternative: Alternative = "two-sided",
     group_by: Optional[Union[str, list[str]]] = None,
 ) -> pl.DataFrame:
     """
@@ -157,11 +155,13 @@ def two_t(
             - "two-sided": mean1 != mean2
             - "greater": mean1 > mean2
             - "less": mean1 < mean2
-        group_by: Optional column name(s) to group by before testing
+        group_by: Optional column name(s) to group by before testing. In grouping
+            mode, groups without exactly 2 levels of group_column are skipped.
 
     Returns:
         DataFrame with columns:
             - group columns (if group_by specified)
+            - group1, group2: group labels, sorted (grouping mode only)
             - n1, n2: sample sizes
             - mean1, mean2: sample means
             - std1, std2: sample standard deviations
@@ -171,10 +171,6 @@ def two_t(
             - alternative: direction of test
             - significant_at_0.05: boolean indicator
     """
-    is_lazy = isinstance(df, pl.LazyFrame)
-    working_df = df if not is_lazy else df.collect()
-
-    # Validate inputs
     if column2 is None and group_column is None:
         raise ValueError("Must specify either column2 or group_column")
     if column2 is not None and group_column is not None:
@@ -182,206 +178,52 @@ def two_t(
 
     # Two columns mode
     if column2 is not None:
-        if column1 not in working_df.columns:
-            raise ValueError(f"Column '{column1}' not found in DataFrame")
-        if column2 not in working_df.columns:
-            raise ValueError(f"Column '{column2}' not found in DataFrame")
-
-        def perform_test(data: pl.DataFrame) -> dict:
-            """Perform two-sample t-test comparing two columns."""
-            values1 = data.select(pl.col(column1).drop_nulls()).to_series()
-            values2 = data.select(pl.col(column2).drop_nulls()).to_series()
-
-            n1, n2 = len(values1), len(values2)
-
-            if n1 < 2 or n2 < 2:
-                return {
-                    "n1": n1,
-                    "n2": n2,
-                    "mean1": None,
-                    "mean2": None,
-                    "std1": None,
-                    "std2": None,
-                    "t_statistic": None,
-                    "df": None,
-                    "p_value": None,
-                    "alternative": alternative,
-                    "significant_at_0.05": None,
-                }
-
-            # Calculate statistics
-            mean1, mean2 = values1.mean(), values2.mean()
-            std1, std2 = values1.std(), values2.std()
-            var1, var2 = std1**2, std2**2
-
-            # Welch's standard error
-            se = math.sqrt(var1 / n1 + var2 / n2)
-
-            # Welch's t-statistic
-            t_stat = (mean1 - mean2) / se if se > 0 else float("inf")
-
-            # Welch-Satterthwaite degrees of freedom
-            if var1 > 0 and var2 > 0:
-                numerator = (var1 / n1 + var2 / n2) ** 2
-                denominator = (var1 / n1) ** 2 / (n1 - 1) + (var2 / n2) ** 2 / (n2 - 1)
-                df_val = numerator / denominator if denominator > 0 else n1 + n2 - 2
-            else:
-                df_val = n1 + n2 - 2
-
-            # Calculate p-value
-            from scipy import stats
-
-            if alternative == "two-sided":
-                p_value = 2 * (1 - stats.t.cdf(abs(t_stat), df_val))
-            elif alternative == "greater":
-                p_value = 1 - stats.t.cdf(t_stat, df_val)
-            else:  # less
-                p_value = stats.t.cdf(t_stat, df_val)
-
-            return {
-                "n1": n1,
-                "n2": n2,
-                "mean1": float(mean1),
-                "mean2": float(mean2),
-                "std1": float(std1),
-                "std2": float(std2),
-                "t_statistic": float(t_stat),
-                "df": float(df_val),
-                "p_value": float(p_value),
-                "alternative": alternative,
-                "significant_at_0.05": p_value < 0.05,
-            }
+        lf, by = _prepare(df, [column1, column2], group_by)
+        x1, x2 = pl.col(column1), pl.col(column2)
+        stats = _aggregate(lf, by, [
+            x1.count().cast(pl.Int64).alias("n1"),
+            x2.count().cast(pl.Int64).alias("n2"),
+            x1.mean().alias("mean1"),
+            x2.mean().alias("mean2"),
+            x1.std().alias("std1"),
+            x2.std().alias("std2"),
+        ])
+        return _welch(stats, alternative, by + _TWO_SAMPLE + _RESULT_TAIL)
 
     # Grouping mode
-    else:
-        if column1 not in working_df.columns:
-            raise ValueError(f"Column '{column1}' not found in DataFrame")
-        if group_column not in working_df.columns:
-            raise ValueError(f"Group column '{group_column}' not found in DataFrame")
+    lf, by = _prepare(df, [column1], group_by)
+    if group_column not in lf.collect_schema().names():
+        raise ValueError(f"Group column '{group_column}' not found in DataFrame")
+    x, level = pl.col(column1), pl.col(group_column)
 
-        def perform_test(data: pl.DataFrame) -> dict:
-            """Perform two-sample t-test comparing two groups."""
-            groups = data.select(pl.col(group_column).drop_nulls().unique()).to_series()
+    # Stage 1: stats per (by-group, level). Stage 2: pivot the two sorted levels side by side.
+    per_level = (
+        lf.with_row_index("__row")
+        .filter(level.is_not_null())
+        .group_by(by + [group_column])
+        .agg(
+            x.count().cast(pl.Int64).alias("__n"),
+            x.mean().alias("__mean"),
+            x.std().alias("__std"),
+            pl.col("__row").min().alias("__first"),
+        )
+    )
+    pick = lambda c, i: pl.col(c).sort_by(group_column).get(i)
+    wide = _aggregate(per_level, by, [
+        pl.len().alias("__levels"),
+        pl.col("__first").min(),
+        pick(group_column, 0).cast(pl.String).alias("group1"),
+        pick(group_column, -1).cast(pl.String).alias("group2"),
+        pick("__n", 0).alias("n1"),
+        pick("__n", -1).alias("n2"),
+        pick("__mean", 0).alias("mean1"),
+        pick("__mean", -1).alias("mean2"),
+        pick("__std", 0).alias("std1"),
+        pick("__std", -1).alias("std2"),
+    ]).collect()  # one row per by-group
+    if by:
+        wide = wide.filter(pl.col("__levels") == 2).sort("__first")
+    elif wide["__levels"][0] != 2:
+        raise ValueError(f"Group column must have exactly 2 unique values, found {wide['__levels'][0]}")
 
-            if len(groups) != 2:
-                raise ValueError(
-                    f"Group column must have exactly 2 unique values, found {len(groups)}"
-                )
-
-            group1_val, group2_val = sorted(groups.to_list())
-
-            values1 = (
-                data.filter(pl.col(group_column) == group1_val)
-                .select(pl.col(column1).drop_nulls())
-                .to_series()
-            )
-            values2 = (
-                data.filter(pl.col(group_column) == group2_val)
-                .select(pl.col(column1).drop_nulls())
-                .to_series()
-            )
-
-            n1, n2 = len(values1), len(values2)
-
-            if n1 < 2 or n2 < 2:
-                return {
-                    "group1": str(group1_val),
-                    "group2": str(group2_val),
-                    "n1": n1,
-                    "n2": n2,
-                    "mean1": None,
-                    "mean2": None,
-                    "std1": None,
-                    "std2": None,
-                    "t_statistic": None,
-                    "df": None,
-                    "p_value": None,
-                    "alternative": alternative,
-                    "significant_at_0.05": None,
-                }
-
-            # Calculate statistics
-            mean1, mean2 = values1.mean(), values2.mean()
-            std1, std2 = values1.std(), values2.std()
-            var1, var2 = std1**2, std2**2
-
-            # Welch's standard error
-            se = math.sqrt(var1 / n1 + var2 / n2)
-
-            # Welch's t-statistic
-            t_stat = (mean1 - mean2) / se if se > 0 else float("inf")
-
-            # Welch-Satterthwaite degrees of freedom
-            if var1 > 0 and var2 > 0:
-                numerator = (var1 / n1 + var2 / n2) ** 2
-                denominator = (var1 / n1) ** 2 / (n1 - 1) + (var2 / n2) ** 2 / (n2 - 1)
-                df_val = numerator / denominator if denominator > 0 else n1 + n2 - 2
-            else:
-                df_val = n1 + n2 - 2
-
-            # Calculate p-value
-            from scipy import stats
-
-            if alternative == "two-sided":
-                p_value = 2 * (1 - stats.t.cdf(abs(t_stat), df_val))
-            elif alternative == "greater":
-                p_value = 1 - stats.t.cdf(t_stat, df_val)
-            else:  # less
-                p_value = stats.t.cdf(t_stat, df_val)
-
-            return {
-                "group1": str(group1_val),
-                "group2": str(group2_val),
-                "n1": n1,
-                "n2": n2,
-                "mean1": float(mean1),
-                "mean2": float(mean2),
-                "std1": float(std1),
-                "std2": float(std2),
-                "t_statistic": float(t_stat),
-                "df": float(df_val),
-                "p_value": float(p_value),
-                "alternative": alternative,
-                "significant_at_0.05": p_value < 0.05,
-            }
-
-    # Perform test(s)
-    if group_by is None:
-        # Single test on entire dataset
-        result = perform_test(working_df)
-        result_df = pl.DataFrame([result])
-    else:
-        # Group by and perform tests
-        if isinstance(group_by, str):
-            group_by = [group_by]
-
-        # Validate group columns exist
-        for col in group_by:
-            if col not in working_df.columns:
-                raise ValueError(f"Group column '{col}' not found in DataFrame")
-
-        groups = working_df.group_by(group_by, maintain_order=True)
-        results = []
-
-        for group_values, group_df in groups:
-            try:
-                result = perform_test(group_df)
-                # Add group values
-                if len(group_by) == 1:
-                    result[group_by[0]] = group_values
-                else:
-                    for i, col in enumerate(group_by):
-                        result[col] = group_values[i]
-                results.append(result)
-            except ValueError as e:
-                # Skip groups that don't have exactly 2 values in grouping mode
-                if "must have exactly 2 unique values" in str(e):
-                    continue
-                raise
-
-        result_df = pl.DataFrame(results)
-        # Reorder columns to put group columns first
-        other_cols = [c for c in result_df.columns if c not in group_by]
-        result_df = result_df.select(group_by + other_cols)
-
-    return result_df
+    return _welch(wide.lazy(), alternative, by + ["group1", "group2"] + _TWO_SAMPLE + _RESULT_TAIL)

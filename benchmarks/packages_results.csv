@@ -1,26 +1,42 @@
 package,task,rows,seconds,rows_per_s,note
-quantpolars (128 threads),price,1669576,0.14013686496764421,11913895.75031155,max abs err 3.9e-12
-quantpolars (128 threads),delta,1669576,0.06984747853130102,23903167.803714007,max abs err 4.0e-14
-quantpolars (128 threads),implied vol,1669576,1.0828797612339258,1541792.5976357174,"median rel err 1.8e-15, max 1.6e-09"
-quantpolars (1 thread),price,1669576,1.0395507412031293,1606055.3216168245,max abs err 3.9e-12
-quantpolars (1 thread),delta,1669576,0.7817354230210185,2135730.262225958,max abs err 4.0e-14
-quantpolars (1 thread),implied vol,1669576,16.20151052251458,103050.63825251714,"median rel err 1.8e-15, max 1.6e-09"
-NumPy + SciPy,price,1669576,0.4021962406113744,4151147.702082184,max abs err 0.0e+00
-NumPy + SciPy,delta,1669576,0.16321251168847084,10229460.858900176,max abs err 0.0e+00
-NumPy + SciPy (bisection),implied vol,1669576,24.105355568230152,69261.62094038684,"median rel err 1.7e-15, max 1.1e-09"
-financepy (numba),price,1669576,0.2513526286929846,6642365.3839694215,max abs err 8.4e-04
-financepy (numba),delta,1669576,0.21002991776913404,7949229.413283904,max abs err 7.5e-08
-financepy (numba),implied vol,1669576,112.06888662464917,14897.76556442368,"median rel err 1.2e-06, max 1.6e-04 (0 raised)"
-pyfeng (NumPy),price,1669576,0.15193844307214022,10988502.753100391,max abs err 4.0e-12
-pyfeng (NumPy),delta,1669576,0.08238684292882681,20265080.450313292,max abs err 5.3e-14
-pyfeng (NumPy),implied vol,1669576,1.2477328972890973,1338087.6657395388,"median rel err 1.6e-15, max 7.1e-10"
-vollib (Let's Be Rational),price,50000,0.3662692243233323,136511.6058887366,max abs err 2.6e-12
-vollib (Let's Be Rational),delta,50000,0.3548657540231943,140898.35221668633,max abs err 2.6e-16
-vollib (Let's Be Rational),implied vol,50000,1.9033775739371777,26269.09168451214,"median rel err 1.6e-15, max 3.7e-10"
-QuantLib (scalar),price,50000,0.12994240690022707,384785.8539236634,max abs err 3.4e-12
-QuantLib (scalar),delta,50000,0.3973390683531761,125837.1098699948,max abs err 3.8e-14
-QuantLib (scalar),implied vol,50000,0.20831733476370573,240018.43176764422,"median rel err 3.6e-13, max 4.4e-10"
-blackscholes (pure Python),price,5000,0.023268993943929672,214878.220005914,max abs err 1.8e-12
-blackscholes (pure Python),delta,5000,0.014330243691802025,348912.41960249253,max abs err 2.2e-16
-mibian (pure Python),price,5000,5.085949445143342,983.1006096166732,max abs err 1.8e-12
-mibian (pure Python),implied vol,5000,38.37598247919232,130.28982392075642,"median rel err 2.1e-09, max 1.1e-02"
+quantpolars 0.4.0 (pure Polars) (12 threads),price,1669576,0.07476537500042468,22330871.743644923,max abs err 3.9e-12
+quantpolars 0.4.0 (pure Polars) (12 threads),delta,1669576,0.05272854100621771,31663610.791034874,max abs err 4.0e-14
+quantpolars 0.4.0 (pure Polars) (12 threads),implied vol,1669576,1.3792027919989778,1210536.992591324,"median rel err 1.8e-15, max 1.6e-09"
+quantpolars 0.4.0 (pure Polars) (1 thread),price,1669576,0.518302834010683,3221236.4865548615,max abs err 3.9e-12
+quantpolars 0.4.0 (pure Polars) (1 thread),delta,1669576,0.35788125000544824,4665167.565986156,max abs err 4.0e-14
+quantpolars 0.4.0 (pure Polars) (1 thread),implied vol,1669576,8.841788083998836,188827.8687680228,"median rel err 1.8e-15, max 1.6e-09"
+quantpolars 0.5.0 (Rust) (12 threads),price,1669576,0.0059177080111112446,282132203.3573066,max abs err 2.7e-12
+quantpolars 0.5.0 (Rust) (12 threads),delta,1669576,0.004963125000358559,336396121.3709875,max abs err 2.8e-16
+quantpolars 0.5.0 (Rust) (12 threads),implied vol,1669576,0.043552917006309144,38334424.29948246,"median rel err 1.5e-15, max 1.6e-09"
+quantpolars 0.5.0 (Rust) (1 thread),price,1669576,0.028450750003685243,58683022.408328034,max abs err 2.7e-12
+quantpolars 0.5.0 (Rust) (1 thread),delta,1669576,0.018802375008817762,88796016.41904375,max abs err 2.8e-16
+quantpolars 0.5.0 (Rust) (1 thread),implied vol,1669576,0.3733135410002433,4472315.672039638,"median rel err 1.5e-15, max 1.6e-09"
+NumPy + SciPy (1 thread),price,1669576,0.15155125000455882,11016576.900222052,max abs err 0.0e+00
+NumPy + SciPy (1 thread),delta,1669576,0.0726591249986086,22978201.293120056,max abs err 0.0e+00
+"NumPy + SciPy (1 thread, bisection)",implied vol,1669576,8.962587000001804,186282.82213602657,"median rel err 1.7e-15, max 1.1e-09"
+NumPy + SciPy (12 threads),price,1669576,0.0251296249916777,66438556.10869329,max abs err 0.0e+00
+NumPy + SciPy (12 threads),delta,1669576,0.014314999993075617,116631226.04314351,max abs err 0.0e+00
+"NumPy + SciPy (12 threads, bisection)",implied vol,1669576,1.4593405420018826,1144061.9594585663,"median rel err 1.7e-15, max 1.1e-09"
+financepy (numba),price,1669576,0.1685596669994993,9904955.495699687,max abs err 8.4e-04
+financepy (numba),delta,1669576,0.15115170800709166,11045697.213832792,max abs err 7.5e-08
+financepy (numba),implied vol,1669576,58.6905096249975,28447.120508370794,"median rel err 1.2e-06, max 1.6e-04 (0 raised)"
+"pyfeng (NumPy, 1 thread)",price,1669576,0.06998820799344685,23855104.27922838,max abs err 4.1e-12
+"pyfeng (NumPy, 1 thread)",delta,1669576,0.042997374999686144,38829719.256400816,max abs err 5.3e-14
+"pyfeng (NumPy, 1 thread)",implied vol,1669576,0.514956874991185,3242166.637795795,"median rel err 1.6e-15, max 7.1e-10"
+"pyfeng (NumPy, 12 threads)",price,1669576,0.012551084000733681,133022454.46707264,max abs err 4.1e-12
+"pyfeng (NumPy, 12 threads)",delta,1669576,0.009495167003478855,175834295.42506182,max abs err 5.3e-14
+"pyfeng (NumPy, 12 threads)",implied vol,1669576,0.23021762499411125,7252164.120982076,"median rel err 1.6e-15, max 7.1e-10"
+vollib (Let's Be Rational),price,50000,0.13597733300412074,367708.3444377069,max abs err 2.8e-12
+vollib (Let's Be Rational),delta,50000,0.09628170799987856,519309.44141604827,max abs err 2.6e-16
+vollib (Let's Be Rational),implied vol,50000,0.7656567079975503,65303.41793878723,"median rel err 1.6e-15, max 3.7e-10"
+QuantLib (1 process),price,1669576,0.7434369590046117,2245753.2945838426,max abs err 3.7e-12
+QuantLib (1 process),delta,1669576,4.943118333001621,337757.64356144384,max abs err 7.2e-14
+QuantLib (1 process),implied vol,1669576,3.209004874996026,520278.4243205824,"median rel err 3.6e-13, max 1.3e-09"
+QuantLib (12 threads),price,1669576,0.742587666012696,2248321.7489522044,SWIG bindings hold the GIL
+QuantLib (12 processes),price,1669576,0.11870620801346377,14064774.100193944,max abs err 3.7e-12
+QuantLib (12 processes),delta,1669576,0.5993021670001326,2785866.7829573033,max abs err 7.2e-14
+QuantLib (12 processes),implied vol,1669576,0.39894625000306405,4184964.7665247563,"median rel err 3.6e-13, max 1.3e-09"
+blackscholes (pure Python),price,5000,0.012167667009634897,410925.1178587299,max abs err 2.7e-12
+blackscholes (pure Python),delta,5000,0.007277540993527509,687045.2539459268,max abs err 2.2e-16
+mibian (pure Python),price,5000,1.662054917003843,3008.3241828214746,max abs err 1.8e-12
+mibian (pure Python),implied vol,5000,12.163875666999957,411.05319857590894,"median rel err 2.1e-09, max 1.1e-02"

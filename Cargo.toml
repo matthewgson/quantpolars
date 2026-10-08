@@ -1,0 +1,29 @@
+[package]
+name = "quantpolars"
+version = "0.5.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[lib]
+name = "_internal"
+path = "rust/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+# abi3 = one wheel per platform for every CPython >= 3.9
+pyo3 = { version = "0.29", features = ["abi3-py39"] }
+pyo3-polars = { version = "0.28", features = ["derive", "dtype-struct"] }
+polars = { version = "0.55", default-features = false, features = ["dtype-struct"] }
+polars-arrow = { version = "0.55", default-features = false }
+serde = { version = "1", features = ["derive"] }
+rayon = "1.10"
+# Jäckel's "Let's Be Rational": machine-precision implied vol in two iterations
+implied-vol = "2.1"
+# Regularised incomplete beta for Student-t p-values
+statrs = "0.19"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3

@@ -45,12 +45,10 @@ def timed(label, fn, reps=3):
     print(f"  {label:52s} {best:7.3f} s  {n / best / 1e6:7.2f} M rows/s")
     return out
 
-iv = timed("implied vol, in memory (8 Halley steps)",
+iv = timed("implied vol, in memory",
            lambda: qp.implied_volatility(df, a.spot, a.strike, a.expiry, r, a.price, a.flag, q_col=q))
 share = iv["implied_vol"].is_not_null().mean()
 print(f"  {'':52s} implied vol exists on {share * 100:.1f}% of rows")
-timed("implied vol, in memory (4 Halley steps)",
-      lambda: qp.implied_volatility(df, a.spot, a.strike, a.expiry, r, a.price, a.flag, q_col=q, max_iter=4))
 timed("implied vol, scan_parquet -> streaming -> mean",
       lambda: qp.implied_volatility(lf, a.spot, a.strike, a.expiry, r, a.price, a.flag, q_col=q)
       .select(pl.col("implied_vol").mean()).collect(engine="streaming"))

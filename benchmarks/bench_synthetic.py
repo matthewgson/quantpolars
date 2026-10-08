@@ -2,10 +2,11 @@
 
 Usage:  python benchmarks/bench_synthetic.py [n_rows]
 Compares, on the same rows:
-  * quantpolars (pure Polars expressions)          -- eager DataFrame and lazy streaming
+  * quantpolars (Rust expression plugins)          -- eager DataFrame and lazy streaming
   * NumPy + SciPy closed forms                     -- vectorised, single thread
   * NumPy bisection (60 steps) for implied vol     -- the usual "vectorised" solver
   * py_vollib_vectorized (numba, Let's Be Rational) if installed
+and times the quantpolars-only American models (BAW, CRR) and grouped Welch t-tests.
 Prints a CSV table of seconds and million rows per second.
 """
 import os, sys, time, warnings
@@ -30,8 +31,9 @@ N = df.height
 isc = df["cp"].to_numpy() == "C"
 S, K, T, r, q, sigma, mkt = (df[c].to_numpy() for c in ["S", "K", "T", "r", "q", "sigma", "mkt"])
 rows = []
-def rec(name, seconds, note=""):
-    rows.append((name, seconds, N / seconds / 1e6, note)); print(f"{name:48s} {seconds:8.3f} s   {N/seconds/1e6:7.2f} M rows/s  {note}")
+def rec(name, seconds, note="", n=None):
+    n = n or N
+    rows.append((name, seconds, n / seconds / 1e6, note)); print(f"{name:48s} {seconds:8.3f} s   {n/seconds/1e6:7.2f} M rows/s  {note}")
 def timed(fn, reps=3):
     best = np.inf
     for _ in range(reps):
@@ -75,12 +77,11 @@ def np_bisect():
 t, ivb = timed(np_bisect, reps=1); rec("iv     numpy bisection (60 steps)", t, f"median rel err {np.median(np.abs(ivb-sigma)/sigma):.1e}")
 t, ivq = timed(lambda: qp.implied_volatility(df, "S", "K", "T", "r", "mkt", "cp", q_col="q")); 
 e = np.abs(ivq["implied_vol"].to_numpy() - sigma) / sigma
-rec("iv     quantpolars (8 Halley, eager)", t, f"median rel err {np.nanmedian(e):.1e}, p99.9 {np.nanpercentile(e, 99.9):.1e}, nulls {ivq['implied_vol'].null_count()}")
-t, _ = timed(lambda: qp.implied_volatility(df, "S", "K", "T", "r", "mkt", "cp", q_col="q", max_iter=4)); rec("iv     quantpolars (4 Halley, eager)", t)
+rec("iv     quantpolars (Let's Be Rational, eager)", t, f"median rel err {np.nanmedian(e):.1e}, p99.9 {np.nanpercentile(e, 99.9):.1e}, nulls {ivq['implied_vol'].null_count()}")
 # lazy + streaming from parquet (out-of-core path)
 path = "/tmp/_qp_bench.parquet"; df.write_parquet(path)
 t, _ = timed(lambda: qp.implied_volatility(pl.scan_parquet(path), "S", "K", "T", "r", "mkt", "cp", q_col="q").select(pl.col("implied_vol").mean()).collect(engine="streaming"), reps=2)
-rec("iv     quantpolars (8 Halley, scan_parquet streaming)", t)
+rec("iv     quantpolars (scan_parquet streaming)", t)
 try:
     from py_vollib_vectorized import vectorized_implied_volatility as pv_iv
     flag = np.where(isc, "c", "p")
@@ -91,5 +92,18 @@ try:
 except Exception as ex:
     print("py_vollib_vectorized not available:", type(ex).__name__, str(ex)[:80])
 os.remove(path)
+
+# ---------------- American options (quantpolars only) ----------------
+am = df.head(min(N, 1_000_000))
+na = am.height
+t, _ = timed(lambda: am.select(qp.baw_price("S", "K", "T", "r", "sigma", "q", "cp")))
+rec(f"american quantpolars BAW ({na:,} rows)", t, n=na)
+t, _ = timed(lambda: am.head(100_000).select(qp.crr_price("S", "K", "T", "r", "sigma", "q", "cp", steps=200)), reps=1)
+rec("american quantpolars CRR 200 steps (100,000 rows)", t, n=100_000)
+
+# ---------------- grouped Welch t-tests ----------------
+g = pl.DataFrame({"g": rng.integers(0, 5000, N), "x": rng.normal(0, 1, N), "arm": rng.integers(0, 2, N)})
+t, _ = timed(lambda: qp.two_t(g, "x", group_column="arm", group_by="g"))
+rec("ttest  quantpolars two_t, 5,000 groups", t)
 out = pl.DataFrame(rows, schema=["method", "seconds", "million_rows_per_s", "note"], orient="row")
 print(out.write_csv())

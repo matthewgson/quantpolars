@@ -93,12 +93,14 @@ def test_put_call_parity():
     assert (lhs - rhs).abs().max() < 1e-10
 
 
-def test_crr_binomial_placeholder_warns():
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        price = crr_binomial(100, 100, 1, 0.05, 0.2, 100, 'call', american=False)
-    assert any(issubclass(x.category, DeprecationWarning) for x in w)
-    assert price == pytest.approx(10.450583572185565, abs=1e-10)
+def test_crr_binomial_is_a_real_tree():
+    # 0.4 returned the Black-Scholes price with a DeprecationWarning; it is now a CRR tree.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        euro = crr_binomial(100, 100, 1, 0.05, 0.2, 100, 'call', american=False)
+        am_put = crr_binomial(100, 100, 1, 0.05, 0.2, 2000, 'put', american=True)
+    assert euro == pytest.approx(10.450583572185565, abs=0.05)
+    assert am_put == pytest.approx(6.0903, abs=2e-3)  # standard American put benchmark
 
 
 def test_null_inputs_propagate():

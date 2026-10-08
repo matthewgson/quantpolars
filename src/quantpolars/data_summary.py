@@ -24,7 +24,6 @@ def sm(df: Union[pl.DataFrame, pl.LazyFrame]) -> pl.DataFrame:
     """
     is_lazy = isinstance(df, pl.LazyFrame)
     schema = df.collect_schema() if is_lazy else df.schema
-    total_rows = df.select(pl.len()).collect().item() if is_lazy else len(df)
 
     # Separate columns by type
     numeric_cols = [
@@ -170,12 +169,14 @@ def sm(df: Union[pl.DataFrame, pl.LazyFrame]) -> pl.DataFrame:
         ]
         all_stats.extend(categorical_stats)
 
-    # Single pass through data
-    result = df.select(all_stats)
+    # Single pass through data (row count included so lazy sources are scanned once)
+    result = df.select(all_stats + [pl.len().alias("__total_rows")])
 
     # Collect if lazy
     if is_lazy:
         result = result.collect(engine="streaming")
+
+    total_rows = result["__total_rows"][0]
 
     # Reshape from wide to long format using Polars operations
     all_cols = numeric_cols + date_cols + categorical_cols

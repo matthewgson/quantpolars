@@ -488,3 +488,67 @@ class TestRealWorldScenarios:
         row = result.row(0, named=True)
         assert row["n"] == 200
         assert row["mean"] > 100  # Should be slightly above target
+
+
+class TestAgainstScipy:
+    """Numerical agreement with scipy.stats on many groups at once."""
+
+    @pytest.fixture
+    def panel(self):
+        import numpy as np
+
+        rng = np.random.default_rng(7)
+        n = 3000
+        return pl.DataFrame({
+            "g": rng.integers(0, 30, n),
+            "x": rng.normal(0.1, 1, n),
+            "y": rng.normal(0.0, 2, n),
+            "arm": rng.choice(["a", "b"], n),
+        })
+
+    @pytest.mark.parametrize("alternative", ["two-sided", "greater", "less"])
+    def test_one_t_grouped(self, panel, alternative):
+        from scipy import stats
+
+        out = one_t(panel, "x", mu=0.05, alternative=alternative, group_by="g")
+        for row in out.iter_rows(named=True):
+            vals = panel.filter(pl.col("g") == row["g"])["x"].to_numpy()
+            ref = stats.ttest_1samp(vals, 0.05, alternative=alternative)
+            assert row["t_statistic"] == pytest.approx(ref.statistic, rel=1e-10)
+            assert row["p_value"] == pytest.approx(ref.pvalue, rel=1e-9, abs=1e-15)
+
+    @pytest.mark.parametrize("alternative", ["two-sided", "greater", "less"])
+    def test_two_t_grouping_mode(self, panel, alternative):
+        from scipy import stats
+
+        out = two_t(panel, "x", group_column="arm", alternative=alternative, group_by="g")
+        assert len(out) == 30
+        for row in out.iter_rows(named=True):
+            sub = panel.filter(pl.col("g") == row["g"])
+            a = sub.filter(pl.col("arm") == "a")["x"].to_numpy()
+            b = sub.filter(pl.col("arm") == "b")["x"].to_numpy()
+            ref = stats.ttest_ind(a, b, equal_var=False, alternative=alternative)
+            assert (row["group1"], row["group2"]) == ("a", "b")
+            assert row["t_statistic"] == pytest.approx(ref.statistic, rel=1e-10)
+            assert row["p_value"] == pytest.approx(ref.pvalue, rel=1e-9, abs=1e-15)
+
+    def test_two_t_two_columns(self, panel):
+        from scipy import stats
+
+        row = two_t(panel, "x", "y").row(0, named=True)
+        ref = stats.ttest_ind(panel["x"].to_numpy(), panel["y"].to_numpy(), equal_var=False)
+        assert row["t_statistic"] == pytest.approx(ref.statistic, rel=1e-10)
+        assert row["df"] == pytest.approx(ref.df, rel=1e-10)
+        assert row["p_value"] == pytest.approx(ref.pvalue, rel=1e-9)
+
+    def test_group_order_follows_first_appearance(self, panel):
+        out = one_t(panel, "x", group_by="g")
+        assert out["g"].to_list() == panel["g"].unique(maintain_order=True).to_list()
+        out2 = two_t(panel, "x", group_column="arm", group_by="g")
+        assert out2["g"].to_list() == panel["g"].unique(maintain_order=True).to_list()
+
+    def test_skips_groups_without_two_levels(self):
+        df = pl.DataFrame({"g": [1, 1, 1, 1, 2, 2], "v": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                           "arm": ["a", "a", "b", "b", "a", "a"]})
+        out = two_t(df, "v", group_column="arm", group_by="g")
+        assert out["g"].to_list() == [1]
