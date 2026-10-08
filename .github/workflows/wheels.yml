@@ -1,0 +1,107 @@
+# Build pre-compiled wheels (no Rust needed to install) and attach them to a
+# GitHub Release. Runs when a version tag (v*) is pushed, or manually from the
+# Actions tab with the tag to build ("Run workflow").
+#
+# Wheels are abi3: one file per platform covers every CPython >= 3.9.
+
+name: wheels
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and release (e.g. v0.5.0)"
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    name: ${{ matrix.os }} ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: linux, runner: ubuntu-22.04, target: x86_64 }
+          - { os: linux, runner: ubuntu-22.04, target: aarch64 }
+          - { os: macos, runner: macos-latest, target: aarch64 }
+          - { os: macos, runner: macos-15-intel, target: x86_64 }
+          - { os: windows, runner: windows-latest, target: x64 }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          manylinux: auto
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-${{ matrix.os }}-${{ matrix.target }}
+          path: dist
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sdist
+          path: dist
+
+  # Install the Linux wheel on a clean runner (no Rust) and run the test suite.
+  test-linux:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheels-linux-x86_64
+          path: dist
+      - name: Install wheel and test
+        run: |
+          pip install dist/*.whl pytest scipy
+          cd tests && python -m pytest -q -p no:cacheprovider .
+
+  release:
+    needs: [build, sdist, test-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Attach wheels to the GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.TAG }}
+          name: quantpolars ${{ env.TAG }}
+          files: dist/*
+          generate_release_notes: true

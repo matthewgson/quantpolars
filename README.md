@@ -7,12 +7,21 @@ and streaming queries and inside `group_by`, uses every core, and never holds th
 
 ## Installation
 
+Pre-built wheels (no Rust needed) for Linux x86-64/ARM, macOS and Windows, any Python 3.9+:
+
+```bash
+pip install quantpolars --find-links https://github.com/matthewgson/quantpolars/releases/expanded_assets/v0.5.0
+```
+
+Or build from source (needs a [Rust toolchain](https://rustup.rs); the first build takes a few
+minutes):
+
 ```bash
 pip install git+https://github.com/matthewgson/quantpolars.git
 ```
 
-Requires Python 3.9+ and **Polars 2.0+**. Installing from source compiles the Rust extension, so a
-[Rust toolchain](https://rustup.rs) is needed (first build takes a few minutes).
+Requires **Polars 2.0+**. Wheels are built by GitHub Actions for every `v*` tag
+(`.github/workflows/wheels.yml`) and attached to the release.
 
 ## Options in one query
 
