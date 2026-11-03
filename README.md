@@ -10,7 +10,7 @@ and streaming queries and inside `group_by`, uses every core, and never holds th
 Pre-built wheels (no Rust needed) for Linux x86-64/ARM, macOS and Windows, any Python 3.9+:
 
 ```bash
-pip install quantpolars --find-links https://github.com/matthewgson/quantpolars/releases/expanded_assets/v0.5.0
+pip install quantpolars --find-links https://github.com/matthewgson/quantpolars/releases/expanded_assets/v0.5.1
 ```
 
 Or build from source (needs a [Rust toolchain](https://rustup.rs); the first build takes a few
@@ -99,7 +99,7 @@ cargo test --release        # Rust tests
 python benchmarks/bench_packages.py
 ```
 
-## Unreleased
+## Changes in 0.5.1
 
 * Greeks default to the implied volatility of the option price (`market_col=` / `price=`);
   `sigma_col` / `sigma` is now optional and used only when passed explicitly. Passing both, or

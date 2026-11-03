@@ -1,6 +1,6 @@
 # QuantPolars Package
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 
 from ._normal import erf, erfc, erfcx, norm_cdf, norm_pdf, norm_ppf, norm_sf
 from .option_pricing import (black76, black76_price, black_scholes, bs_price, baw_price,
