@@ -116,3 +116,55 @@ def test_null_sigma_gives_null_greeks_not_expiry_values():
     out = calculate_greeks(df, "S", "K", "T", "r", "sigma", "call", greeks=ALL_GREEKS)
     assert all(out[g][0] is None for g in ALL_GREEKS)
     assert all(out[g][1] is not None for g in ALL_GREEKS)
+
+
+# --- volatility source: implied from the market price by default, explicit sigma on request ---
+
+def _priced_grid():
+    from quantpolars import bs_price
+    return _grid().with_columns(mkt=bs_price("S", "K", "T", "r", "sigma", "q", "cp"))
+
+
+def test_greeks_default_to_implied_vol_of_market_price():
+    df = _priced_grid()
+    explicit = calculate_greeks(df, "S", "K", "T", "r", "sigma", "cp", q_col="q", greeks=ALL_GREEKS)
+    implied = calculate_greeks(df, "S", "K", "T", "r", option_type="cp", q_col="q", greeks=ALL_GREEKS,
+                               market_col="mkt")
+    ok = implied["delta"].is_not_null()
+    # Only quotes indistinguishable from discounted intrinsic (no recoverable vol) are null.
+    assert ok.sum() >= len(df) - 2
+    for g in ALL_GREEKS:
+        rel = ((explicit[g] - implied[g]).abs() / explicit[g].abs().clip(1e-3)).filter(ok).max()
+        assert rel < 1e-5, g
+
+
+def test_implied_vol_greeks_expression_api_and_vega():
+    df = _priced_grid()
+    frame = calculate_greeks(df.lazy(), "S", "K", "T", "r", option_type="cp", q_col="q", market_col="mkt").collect()
+    exprs = df.select(**bs_greeks("S", "K", "T", "r", q="q", option_type="cp", price="mkt"))
+    for g in exprs.columns:
+        assert (exprs[g] - frame[g]).abs().max() == 0, g
+    # Vega from put prices needs the put flag to back out the vol.
+    v = calculate_vega(df, "S", "K", "T", "r", q_col="q", market_col="mkt", option_type="cp")["vega"]
+    assert (v - frame["vega"]).abs().max() == 0
+
+
+def test_implied_vol_greeks_at_expiry_and_without_iv():
+    df = pl.DataFrame({"S": [100.0] * 4, "K": [90.0, 110.0, 90.0, 90.0], "T": [0.0, 0.0, 0.5, 0.5],
+                       "r": [0.05] * 4, "mkt": [10.0, 0.0, 5.0, None]})
+    out = calculate_greeks(df, "S", "K", "T", "r", market_col="mkt", greeks=ALL_GREEKS)
+    # At expiry: exercise-indicator delta and zero Greeks, as with an explicit sigma.
+    assert out["delta"].to_list()[:2] == [1.0, 0.0]
+    assert all(out[g].to_list()[:2] == [0.0, 0.0] for g in ALL_GREEKS[1:])
+    # Price below intrinsic (no implied vol) and null price: null Greeks.
+    assert all(out[g][2] is None and out[g][3] is None for g in ALL_GREEKS)
+
+
+def test_volatility_source_must_be_unambiguous():
+    df = _priced_grid()
+    with pytest.raises(ValueError, match="not both"):
+        calculate_greeks(df, "S", "K", "T", "r", "sigma", "cp", q_col="q", market_col="mkt")
+    with pytest.raises(ValueError, match="implied volatility"):
+        calculate_greeks(df, "S", "K", "T", "r", option_type="cp", q_col="q")
+    with pytest.raises(ValueError):
+        bs_greeks("S", "K", "T", "r")

@@ -35,10 +35,14 @@ df = pl.DataFrame({
 })
 
 df = qp.implied_volatility(df, "S", "K", "T", "r", "mkt", option_type="cp", q_col="q")
-df = qp.calculate_greeks(df, "S", "K", "T", "r", "implied_vol", option_type="cp", q_col="q",
+df = qp.calculate_greeks(df, "S", "K", "T", "r", option_type="cp", q_col="q", market_col="mkt",
                          greeks=("delta", "gamma", "vega", "theta"), theta_per_day=True)
 df = df.with_columns(american=qp.baw_price("S", "K", "T", "r", "implied_vol", "q", "cp"))
 ```
+
+Greeks are evaluated at each option's implied volatility, backed out of the observed price
+(`market_col=`, or `price=` in `bs_greeks`/`greeks_struct`); rows with no implied vol get null
+Greeks. To use a volatility of your own instead, pass it explicitly as `sigma_col` (`sigma`).
 
 Arguments can be column names, expressions or scalars. `option_type` is `"call"`/`"put"` or a
 column of per-row flags (`"C"`/`"P"`, `"call"`/`"put"`, booleans, or `+1`/`-1`). LazyFrame in,
@@ -94,6 +98,12 @@ pytest                      # Python tests
 cargo test --release        # Rust tests
 python benchmarks/bench_packages.py
 ```
+
+## Unreleased
+
+* Greeks default to the implied volatility of the option price (`market_col=` / `price=`);
+  `sigma_col` / `sigma` is now optional and used only when passed explicitly. Passing both, or
+  neither, raises `ValueError`. Existing calls that pass a volatility are unchanged.
 
 ## Changes in 0.5.0
 
